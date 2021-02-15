@@ -86,9 +86,9 @@ export const defaultConfig: LoggerConfig = {
     }
   },
   channels: {
-    info: { transports: ['stdout'], formatter: 'console' },
-    warn: { transports: ['stdout'], formatter: 'console' },
-    error: { transports: ['stderr'], formatter: 'console' }
+    info: { transports: ['stdout'], formatter: 'json' },
+    warn: { transports: ['stdout'], formatter: 'json' },
+    error: { transports: ['stderr'], formatter: 'json' }
   }
 }
 

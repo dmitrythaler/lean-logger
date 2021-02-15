@@ -19,7 +19,9 @@
   },
   "dependencies": {},
   "scripts": {
-    "test": "jest"
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && jest"
   },
   "devDependencies": {
     "@types/jest": "^26.0.20",

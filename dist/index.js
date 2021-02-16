@@ -13,7 +13,16 @@ export const defaultConfig = {
     fatal: { active: true, severity: LEVELS.fatal }
 };
 //  mainly for testing
-export const mergeWithDefaultConfig = (cfg) => ({ ...defaultConfig, ...cfg });
+export const mergeWithDefaultConfig = (cfg) => {
+    const merged = { ...defaultConfig };
+    Object.entries(cfg).forEach(([ch, channel]) => {
+        merged[ch] = {
+            ...(merged[ch] || { active: true, severity: LEVELS.debug }),
+            ...channel
+        };
+    });
+    return merged;
+};
 //  ---------------------------------
 const buildLogFunc = (chName, channel) => {
     if (channel.active === false) {
@@ -87,7 +96,7 @@ export const createDebugLogger = (ch, severity = LEVELS.debug) => {
     return buildLogFunc(ch, cfg[ch]);
 };
 export const createLogger = (cfg) => {
-    cfg = parseEnv({ ...defaultConfig, ...cfg }, 'LOG');
+    cfg = parseEnv(mergeWithDefaultConfig(cfg), 'LOG');
     return Object.entries(cfg).reduce((logger, [chName, channel]) => {
         logger[chName] = buildLogFunc(chName, channel);
         return logger;

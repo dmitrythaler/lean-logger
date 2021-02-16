@@ -35,7 +35,16 @@ export const defaultConfig: LoggerConfig = {
 }
 
 //  mainly for testing
-export const mergeWithDefaultConfig = (cfg: LoggerConfig) => ({ ...defaultConfig, ...cfg })
+export const mergeWithDefaultConfig = (cfg: LoggerConfig) => {
+  const merged = { ...defaultConfig }
+  Object.entries(cfg).forEach(([ch, channel]) => {
+    merged[ch] = {
+      ...(merged[ch] || { active: true, severity: LEVELS.debug }),
+      ...channel
+    }
+  })
+  return merged
+}
 
 //  ---------------------------------
 const buildLogFunc = (chName: string, channel: LoggerChannelCfg): LoggerFunc => {
@@ -110,7 +119,7 @@ export const createDebugLogger = (ch: string, severity = LEVELS.debug): LoggerFu
 }
 
 export const createLogger = (cfg: LoggerConfig): Logger => {
-  cfg = parseEnv({ ...defaultConfig, ...cfg }, 'LOG')
+  cfg = parseEnv(mergeWithDefaultConfig(cfg), 'LOG')
   return Object.entries(cfg).reduce((logger, [chName, channel]) => {
     logger[chName] = buildLogFunc(chName, channel)
     return logger

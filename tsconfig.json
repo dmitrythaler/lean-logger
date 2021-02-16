@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
-    "target": "ES2019",
+    "target": "ES5",
     "declaration": true,
     "allowJs": true,
     "checkJs": false,
-    "outDir": "dist",
+    "outDir": "./",
     "rootDir": "src",
     "strict": false,
     "esModuleInterop": true,
@@ -15,10 +15,8 @@
     "noImplicitReturns": true,
   },
   "include": [
-    "src"
+    "./src"
   ],
   "exclude": [
-    "node_modules",
-    "dist"
   ]
 }

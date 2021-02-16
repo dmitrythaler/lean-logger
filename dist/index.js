@@ -1,127 +1,96 @@
-import { inspect } from 'util';
-import fs from 'fs';
-//  ---------------------------------
-const streamsHash = {};
-const getStream = (fileName) => {
-    if (!streamsHash[fileName]) {
-        streamsHash[fileName] = fs.createWriteStream(fileName, { flags: 'a' });
-        streamsHash[fileName].on('error', err => {
-            console.error(`LeanLogger, file transport, error writing to ${fileName}: ${err.toString()}`);
-        });
-    }
-    return streamsHash[fileName];
-};
-//  ---------------------------------
-export const defaultConfig = {
-    opts: {
-        depth: 4,
-        showHidden: false
-    },
-    formatters: {
-        'console': (_) => {
-            _.message = _.data.reduce((m, d) => m + (typeof (d) === 'object' && d != null && !(d instanceof Date) ? inspect(d) + '\n' : d + ' '), `${_.time.toISOString().slice(0, -5)} ${_.channel.toUpperCase()}: `);
-            return _;
-        },
-        'json': (_) => {
-            _.message = JSON.stringify({
-                channel: _.channel.toUpperCase(),
-                time: _.time.getTime(),
-                messages: _.data,
-                ..._.dataBound
-            } /*, null, 2*/);
-            return _;
-        }
-    },
-    transports: {
-        'stdout': (_) => {
-            process.stdout.write(_.message + '\n');
-            return _;
-        },
-        'stderr': (_) => {
-            process.stderr.write(_.message + '\n');
-            return _;
-        },
-        'file': (_) => {
-            if (!_.stream) {
-                _.stream = getStream(_.opts.fileName);
-            }
-            _.stream.write(_.message + '\n');
-            return _;
-        }
-    },
-    channels: {
-        info: { transports: ['stdout'], formatter: 'json' },
-        warn: { transports: ['stdout'], formatter: 'json' },
-        error: { transports: ['stderr'], formatter: 'json' }
-    }
-};
-//  ---------------------------------
-const validateMergeConfig = (cfg) => {
-    //  merge ...
-    const merged = {
-        opts: { ...defaultConfig.opts, ...cfg.opts },
-        transports: { ...defaultConfig.transports, ...cfg.transports },
-        formatters: { ...defaultConfig.formatters, ...cfg.formatters },
-        channels: { ...defaultConfig.channels, ...cfg.channels },
-    };
-    //  ...then validate
-    Object.entries(merged.channels).forEach(([chName, channel]) => {
-        if (!channel.transports) {
-            throw new Error(`LeanLogger error, channel "${chName}" contains no transports.`);
-        }
-        channel.transports.forEach(trName => {
-            if (!merged.transports[trName]) {
-                throw new Error(`LeanLogger error, channel "${chName}" contains invalid transport name "${trName}".`);
-            }
-            if (trName === 'file' && (!channel.opts || !channel.opts.fileName)) {
-                throw new Error(`LeanLogger error, channel "${chName}" has type "file" and contains no file name.`);
-            }
-        });
-        if (!merged.formatters[channel.formatter]) {
-            throw new Error(`LeanLogger error, channel "${chName}" contains invalid formatter name "${channel.formatter}".`);
-        }
-    });
-    return merged;
-};
 //  ----------------------------------------------------------------------------------------------//
-const pipe = (...fns) => fns.reduce((prev, curr) => prev ? par => curr(prev(par)) : curr, null);
-const dummyLogger = () => { };
-const buildLogFunc = (cfg, chName, channel) => {
-    if (channel.active === false) {
-        return dummyLogger;
-    }
-    const pipeline = pipe(cfg.formatters[channel.formatter], ...channel.transports.map(tr => cfg.transports[tr]));
-    return (...args) => pipeline({
-        channel: chName,
-        opts: { ...cfg.opts, ...channel.opts },
-        time: new Date(),
-        data: [...args],
-        dataBound: channel.dataBound
-    }).message;
+export const LEVELS = {
+    debug: 10,
+    info: 20,
+    warn: 30,
+    error: 40,
+    fatal: 50
 };
-export const createLogger = (cfg) => {
-    cfg = validateMergeConfig(cfg);
-    //  env variables recognized in two forms
-    //    LOG=-info,-warn,+debug  <-- the "+" sign is optional
-    //    LOG=*                   <-- all channels active
-    const env = process.env;
-    const envParams = env.LEANLOGGER || env.LOGGER || env.LOG;
-    if (envParams) {
-        if (envParams === '*') {
-            Object.values(cfg.channels).forEach(ch => ch.active = true);
+export const defaultConfig = {
+    info: { active: true, severity: LEVELS.info },
+    warn: { active: true, severity: LEVELS.warn },
+    error: { active: true, severity: LEVELS.error },
+    fatal: { active: true, severity: LEVELS.fatal }
+};
+//  mainly for testing
+export const mergeWithDefaultConfig = (cfg) => ({ ...defaultConfig, ...cfg });
+//  ---------------------------------
+const buildLogFunc = (chName, channel) => {
+    if (channel.active === false) {
+        return () => { };
+    }
+    if (channel.severity > 30) {
+        return (...args) => {
+            const msg = JSON.stringify({
+                channel: chName.toUpperCase(),
+                severity: channel.severity,
+                time: Date.now(),
+                messages: [...args],
+            } /*, null, 2*/);
+            process.stderr.write(msg + '\n');
+            return msg;
+        };
+    }
+    return (...args) => {
+        const msg = JSON.stringify({
+            channel: chName.toUpperCase(),
+            severity: channel.severity,
+            time: Date.now(),
+            messages: [...args],
+        } /*, null, 2*/);
+        process.stdout.write(msg + '\n');
+        return msg;
+    };
+};
+//  env variables recognized in the following forms
+//    LOG=-info,-warn,+debug  <-- "-" sign to deactivate, "+" or absence vice versa
+//    LOG=* | LOG=all         <-- all channels active
+//    LOG=*,-debug,-request   <-- all channels except debug and request
+//    LOG=warn+               <-- set lowest severity level
+const parseEnv = (cfg, envName = 'LOG') => {
+    const envParams = process.env[envName];
+    if (!envParams) {
+        return cfg;
+    }
+    envParams.split(',').forEach(par => {
+        if (par.startsWith('-')) {
+            par = par.slice(1);
+            if (par === '*' || par === 'all') {
+                Object.values(cfg).forEach(ch => ch.active = false);
+            }
+            else if (cfg[par]) {
+                cfg[par].active = false;
+            }
         }
         else {
-            envParams.split(',').forEach(par => {
-                const ch = par.startsWith('-') || par.startsWith('+') ? par.slice(1) : par;
-                if (cfg.channels[ch]) {
-                    cfg.channels[ch].active = !par.startsWith('-');
+            if (par.startsWith('+')) {
+                par = par.slice(1);
+            }
+            if (par === '*' || par === 'all') {
+                Object.values(cfg).forEach(ch => ch.active = true);
+            }
+            else if (cfg[par]) {
+                cfg[par].active = true;
+            }
+            else if (par.endsWith('+')) {
+                par = par.slice(0, -1);
+                if (LEVELS[par]) {
+                    Object.values(cfg).forEach(ch => ch.active = ch.severity >= LEVELS[par]);
                 }
-            });
+            }
         }
-    }
-    return Object.entries(cfg.channels).reduce((loggr, [chName, channel]) => {
-        loggr[chName] = buildLogFunc(cfg, chName, channel);
-        return loggr;
+    });
+    return cfg;
+};
+export const createDebugLogger = (ch, severity = LEVELS.debug) => {
+    const cfg = parseEnv({ [ch]: { active: false, severity } }, 'DEBUG');
+    return buildLogFunc(ch, cfg[ch]);
+};
+export const createLogger = (cfg) => {
+    cfg = parseEnv({ ...defaultConfig, ...cfg }, 'LOG');
+    return Object.entries(cfg).reduce((logger, [chName, channel]) => {
+        logger[chName] = buildLogFunc(chName, channel);
+        return logger;
     }, {});
 };
 export default createLogger;

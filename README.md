@@ -1,2 +1,3 @@
 ### lean-logger
-Dead simple, fast, configurable node.js logging
+Dead simple, configurable node.js logging
+TBD...

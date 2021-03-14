@@ -108,4 +108,29 @@ describe('Lean Logger usage suite', () => {
     info = debug('some information', { msg: 'hi there' }) as string
     assert.strictEqual(info, undefined)
   })
+
+  it('should be able to parse env with wild symbol', () => {
+    process.env.DEBUG = 'module:*'
+    let debug1: T.LoggerFunc = L.createDebugLogger('module:db')
+    let debug2: T.LoggerFunc = L.createDebugLogger('module:auth')
+    let debug3: T.LoggerFunc = L.createDebugLogger('module/err')
+    const now = Date.now()
+
+    let info = debug1('some information', { msg: 'hi there' }) as string
+    let data = JSON.parse(info)
+    assert.strictEqual(data.channel, 'MODULE:DB')
+    assert.ok(data.time - now < 10)
+    assert.strictEqual(data.messages[0], 'some information')
+    assert.strictEqual(data.messages[1].msg, 'hi there')
+
+    info = debug2('some other information', { msg: 'nothing new' }) as string
+    data = JSON.parse(info)
+    assert.strictEqual(data.channel, 'MODULE:AUTH')
+    assert.ok(data.time - now < 10)
+    assert.strictEqual(data.messages[0], 'some other information')
+    assert.strictEqual(data.messages[1].msg, 'nothing new')
+
+    info = debug3('some useless information', { msg: 'void' }) as string
+    assert.strictEqual(info, undefined)
+  })
 })

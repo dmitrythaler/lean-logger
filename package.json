@@ -1,7 +1,7 @@
 {
   "name": "lean-logger",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "dead simple, fast, configurable node.js logging",
   "main": "index.js",
   "types": "index.d.ts",

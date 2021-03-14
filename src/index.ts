@@ -77,10 +77,12 @@ const buildLogFunc = (chName: string, channel: LoggerChannelCfg): LoggerFunc => 
 }
 
 //  env variables recognized in the following forms
-//    LOG=-info,-warn,+debug  <-- "-" sign to deactivate, "+" or absence vice versa
+//    LOG=-info,-warn,+debug  <-- "-" sign to deactivate, "+"(or nothing) vice versa
 //    LOG=* | LOG=all         <-- all channels active
 //    LOG=*,-debug,-request   <-- all channels except debug and request
 //    LOG=warn+               <-- set lowest severity level
+//    DEBUG=module:db         <-- debug logger
+//    DEBUG=module:*          <-- all debug loggers starting with "module:"
 const parseEnv = (cfg: LoggerConfig, envName = 'LOG'): LoggerConfig => {
   const envParams = process.env[envName]
   if (!envParams) {
@@ -107,6 +109,10 @@ const parseEnv = (cfg: LoggerConfig, envName = 'LOG'): LoggerConfig => {
         if (LEVELS[par]) {
           Object.values(cfg).forEach(ch => ch.active = ch.severity >= LEVELS[par])
         }
+      } else if (par.endsWith('*')) {
+        par = par.slice(0, -1)
+        const pl = par.length
+        Object.entries(cfg).forEach(([name, ch]) => ch.active = name.slice(0, pl) === par )
       }
     }
   })

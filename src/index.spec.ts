@@ -3,16 +3,19 @@ import * as L from '../src/index'
 import type * as T from '../src/index'
 
 const cfg: T.LoggerConfig = {
-  // info: { active: true, severity: L.LEVELS.info },
-  // warn: { active: true, severity: L.LEVELS.warn },
-  // error: { active: true, severity: L.LEVELS.error },
-  // fatal: { active: true, severity: L.LEVELS.fatal },
-  request: { severity: L.LEVELS.info },
-  emptiness: {/*defaults - active: true, severity: L.LEVELS.debug */}
+  // debug: false,
+  // info: true,
+  // warn: true,
+  // error: true,
+  // fatal: true,
+  request: true,
+  emptiness: true,
+  silent: false
 }
 
 const testChannel = (logger: T.Logger, ch: string) => {
   const out = logger[ch]('information', { ok: false }) as string
+  assert.ok(out)
   const data = JSON.parse(out)
   assert.strictEqual(data.channel, ch.toUpperCase())
   assert.ok(Date.now() - data.time < 10)
@@ -26,42 +29,30 @@ const testDeadChannel = (logger: T.Logger, ch: string) => {
 }
 
 describe('Lean Logger usage suite', () => {
-  it('shoold be deeply configurable', () => {
-    const cfg = L.mergeWithDefaultConfig({
-      fatal: { active: false, severity: 666 },
-      dummy: {},
-      void: undefined
-    })
-    assert.strictEqual(cfg.fatal.severity, 666)
-    assert.strictEqual(cfg.fatal.active, false)
-    assert.strictEqual(cfg.error.severity, L.LEVELS.error)
-    assert.strictEqual(cfg.error.active, true)
-    assert.strictEqual(cfg.dummy.severity, L.LEVELS.debug)
-    assert.strictEqual(cfg.dummy.active, true)
-    assert.strictEqual(cfg.void.severity, L.LEVELS.debug)
-    assert.strictEqual(cfg.void.active, true)
-  })
 
-  it('should be able to log to default channels', () => {
+  it('should log to default channels', () => {
     const logger: T.Logger = L.createLogger(cfg)
     testChannel(logger, 'info')
     testChannel(logger, 'error')
     testChannel(logger, 'warn')
   })
 
-  it('should be able to log to added channels', () => {
+  it('should log to added channels', () => {
     const logger: T.Logger = L.createLogger(cfg)
     testChannel(logger, 'request')
     testChannel(logger, 'emptiness')
   })
 
-  it('shouldn\'t output inactive channels', () => {
-    Object.values(L.mergeWithDefaultConfig(cfg))
-      .forEach(channel => channel.active = false)
+  it('shouldn\'t log to inactive channels', () => {
     const logger: T.Logger = L.createLogger(cfg)
-    testDeadChannel(logger, 'info')
-    testDeadChannel(logger, 'error')
-    testDeadChannel(logger, 'warn')
+    testDeadChannel(logger, 'silent')
+    testDeadChannel(logger, 'debug')
+  })
+
+  it('shouldn\'t log to non-existent channels and shouldn\'t throw', () => {
+    const logger: T.Logger = L.createLogger(cfg)
+    testDeadChannel(logger, 'noSuchChannel')
+    testDeadChannel(logger, '***12345')
   })
 
   it('should be configurable via ENV, explicitly activate', () => {
@@ -76,12 +67,13 @@ describe('Lean Logger usage suite', () => {
   it('should be configurable via ENV, explicitly deactivate', () => {
     process.env.LOG = 'all,-info'
     let logger: T.Logger = L.createLogger(cfg)
+    testDeadChannel(logger, 'debug')
     testDeadChannel(logger, 'info')
     testChannel(logger, 'warn')
     testChannel(logger, 'request')
   })
 
-  it('should be configurable via ENV, min level', () => {
+  it('should be configurable via ENV, min severity level', () => {
     process.env.LOG = 'warn+'
     let logger: T.Logger = L.createLogger(cfg)
     testDeadChannel(logger, 'info')
@@ -91,46 +83,54 @@ describe('Lean Logger usage suite', () => {
     testChannel(logger, 'fatal')
   })
 
-  it('should be able to debug log', () => {
-    process.env.DEBUG = 'test'
-    let debug: T.LoggerFunc = L.createDebugLogger('test')
+  it('should extract channel and log to', () => {
+    process.env.LOG = 'test'
+    let logger: T.Logger = L.createLogger(cfg)
+    let channel: T.LoggerFunc = logger.channel('test')
     const now = Date.now()
 
-    let info = debug('some information', { msg: 'hi there' }) as string
+    let info = channel('some information', { msg: 'hi there' }) as string
     const data = JSON.parse(info)
     assert.strictEqual(data.channel, 'TEST')
     assert.ok(data.time - now < 10)
     assert.strictEqual(data.messages[0], 'some information')
     assert.strictEqual(data.messages[1].msg, 'hi there')
 
-    process.env.DEBUG = 'something-else'
-    debug = L.createDebugLogger('test')
-    info = debug('some information', { msg: 'hi there' }) as string
+    process.env.LOG = 'something-else'
+    logger = L.createLogger(cfg)
+    channel = logger.channel('test')
+    info = channel('some information', { msg: 'hi there' }) as string
     assert.strictEqual(info, undefined)
   })
 
-  it('should be able to parse env with wild symbol', () => {
-    process.env.DEBUG = 'module:*'
-    let debug1: T.LoggerFunc = L.createDebugLogger('module:db')
-    let debug2: T.LoggerFunc = L.createDebugLogger('module:auth')
-    let debug3: T.LoggerFunc = L.createDebugLogger('module/err')
+  it('should extract wild channels and log to', () => {
+    process.env.LOG = 'module:*'
+    let logger: T.Logger = L.createLogger(cfg)
+    const channel1: T.LoggerFunc = logger.channel('module:db')
+    const channel2: T.LoggerFunc = logger.channel('module:auth')
+    const channel3: T.LoggerFunc = logger.channel('module/err')
+    const channel4: T.LoggerFunc = logger.channel('module')
     const now = Date.now()
 
-    let info = debug1('some information', { msg: 'hi there' }) as string
+    let info = channel1('some information', { msg: 'hi there' }) as string
+    assert.ok(info)
     let data = JSON.parse(info)
     assert.strictEqual(data.channel, 'MODULE:DB')
     assert.ok(data.time - now < 10)
     assert.strictEqual(data.messages[0], 'some information')
     assert.strictEqual(data.messages[1].msg, 'hi there')
 
-    info = debug2('some other information', { msg: 'nothing new' }) as string
+    info = channel2('some other information', { msg: 'nothing new' }) as string
+    assert.ok(info)
     data = JSON.parse(info)
     assert.strictEqual(data.channel, 'MODULE:AUTH')
     assert.ok(data.time - now < 10)
     assert.strictEqual(data.messages[0], 'some other information')
     assert.strictEqual(data.messages[1].msg, 'nothing new')
 
-    info = debug3('some useless information', { msg: 'void' }) as string
+    info = channel3('some useless information', { msg: 'void' }) as string
+    assert.strictEqual(info, undefined)
+    info = channel4('some useless information', { msg: 'void' }) as string
     assert.strictEqual(info, undefined)
   })
 })

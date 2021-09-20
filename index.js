@@ -1,112 +1,98 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createLogger = void 0;
 //  ----------------------------------------------------------------------------------------------//
-export const LEVELS = {
+const LEVELS = {
     debug: 10,
     info: 20,
     warn: 30,
     error: 40,
     fatal: 50
 };
-export const defaultConfig = {
-    info: { active: true, severity: LEVELS.info },
-    warn: { active: true, severity: LEVELS.warn },
-    error: { active: true, severity: LEVELS.error },
-    fatal: { active: true, severity: LEVELS.fatal }
+const defaultConfig = {
+    debug: false,
+    info: true,
+    warn: true,
+    error: true,
+    fatal: true
 };
-//  mainly for testing
-export const mergeWithDefaultConfig = (cfg) => {
-    const merged = { ...defaultConfig };
-    Object.entries(cfg).forEach(([ch, channel]) => {
-        merged[ch] = {
-            ...(merged[ch] || { active: true, severity: LEVELS.debug }),
-            ...channel
-        };
-    });
-    return merged;
-};
+const defaultChannels = ['info', 'warn', 'error', 'fatal'];
 //  ---------------------------------
-const buildLogFunc = (chName, channel) => {
-    if (channel.active === false) {
-        return () => { };
-    }
-    if (channel.severity > 30) {
-        return (...args) => {
-            const msg = JSON.stringify({
-                channel: chName.toUpperCase(),
-                severity: channel.severity,
-                time: Date.now(),
-                messages: [...args],
-            } /*, null, 2*/);
-            process.stderr.write(msg + '\n');
-            return msg;
-        };
-    }
+const buildLogFunc = (channel) => {
+    const severity = LEVELS[channel] || 10;
+    const out = severity > 30 ? process.stderr : process.stdout;
     return (...args) => {
         const msg = JSON.stringify({
-            channel: chName.toUpperCase(),
-            severity: channel.severity,
+            channel: channel.toUpperCase(),
+            severity,
             time: Date.now(),
             messages: [...args],
         } /*, null, 2*/);
-        process.stdout.write(msg + '\n');
+        out.write(msg + '\n');
         return msg;
     };
 };
-//  env variables recognized in the following forms
-//    LOG=-info,-warn,+debug  <-- "-" sign to deactivate, "+"(or nothing) vice versa
-//    LOG=* | LOG=all         <-- all channels active
-//    LOG=*,-debug,-request   <-- all channels except debug and request
-//    LOG=warn+               <-- set lowest severity level
-//    DEBUG=module:db         <-- debug logger
-//    DEBUG=module:*          <-- all debug loggers starting with "module:"
-const parseEnv = (cfg, envName = 'LOG') => {
+const injectEnv = (cfg, envName) => {
     const envParams = process.env[envName];
+    let hash = { ...cfg };
     if (!envParams) {
-        return cfg;
+        return Object.keys(hash).filter(k => hash[k]);
     }
-    envParams.split(',').forEach(par => {
-        if (par.startsWith('-')) {
-            par = par.slice(1);
-            if (par === '*' || par === 'all') {
-                Object.values(cfg).forEach(ch => ch.active = false);
+    envParams.split(',').forEach(channel => {
+        if (channel.startsWith('-')) {
+            // starts with [-] - deactivate
+            channel = channel.slice(1);
+            if (channel === '*' || channel === 'all') {
+                hash = {};
             }
-            else if (cfg[par]) {
-                cfg[par].active = false;
+            else if (hash[channel]) {
+                hash[channel] = false;
             }
         }
         else {
-            if (par.startsWith('+')) {
-                par = par.slice(1);
+            // starts with [+] or nothing - activate
+            if (channel.startsWith('+')) {
+                channel = channel.slice(1);
             }
-            if (par === '*' || par === 'all') {
-                Object.values(cfg).forEach(ch => ch.active = true);
+            if (channel === '*' || channel === 'all') {
+                // all default channels
+                defaultChannels.forEach(ch => hash[ch] = true);
             }
-            else if (cfg[par]) {
-                cfg[par].active = true;
-            }
-            else if (par.endsWith('+')) {
-                par = par.slice(0, -1);
-                if (LEVELS[par]) {
-                    Object.values(cfg).forEach(ch => ch.active = ch.severity >= LEVELS[par]);
+            else if (channel.endsWith('+')) {
+                // channel in cfg ends with [+] means least severity level
+                channel = channel.slice(0, -1);
+                if (LEVELS[channel]) {
+                    Object.keys(hash).forEach(ch => hash[ch] = LEVELS[ch] >= LEVELS[channel]);
                 }
             }
-            else if (par.endsWith('*')) {
-                par = par.slice(0, -1);
-                const pl = par.length;
-                Object.entries(cfg).forEach(([name, ch]) => ch.active = name.slice(0, pl) === par);
+            else {
+                // create channel
+                hash[channel] = true;
             }
         }
     });
-    return cfg;
+    return Object.keys(hash).filter(k => hash[k]);
 };
-export const createDebugLogger = (ch, severity = LEVELS.debug) => {
-    const cfg = parseEnv({ [ch]: { active: false, severity } }, 'DEBUG');
-    return buildLogFunc(ch, cfg[ch]);
+const createLogger = (config = defaultConfig) => {
+    const dummyFunc = () => { };
+    const channels = injectEnv({ ...defaultConfig, ...config }, 'LOG');
+    const wildChannels = channels.filter(ch => ch.endsWith('*')).map(ch => ch.slice(0, -1));
+    const logger = {
+        channel: function (ch) {
+            const func = logger[ch];
+            // console.log('+++ wilds', wildChannels, func)
+            if (func && func !== dummyFunc) {
+                return func;
+            }
+            const found = wildChannels.find(wch => ch.startsWith(wch));
+            return found ? buildLogFunc(ch) : dummyFunc;
+        }
+    };
+    channels.forEach(ch => logger[ch] = buildLogFunc(ch));
+    const handler = {
+        get: (target, prop) => target[prop] || dummyFunc
+    };
+    return new Proxy(logger, handler);
 };
-export const createLogger = (cfg) => {
-    cfg = parseEnv(mergeWithDefaultConfig(cfg), 'LOG');
-    return Object.entries(cfg).reduce((logger, [chName, channel]) => {
-        logger[chName] = buildLogFunc(chName, channel);
-        return logger;
-    }, {});
-};
-export default createLogger;
+exports.createLogger = createLogger;
+exports.default = exports.createLogger;

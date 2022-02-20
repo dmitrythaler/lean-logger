@@ -10,5 +10,5 @@ export declare type LoggerFuncGen = (ch: string) => LoggerFunc;
 export declare type Logger = {
     channel: LoggerFuncGen;
 } & Record<string, LoggerFunc>;
-export declare const createLogger: (config?: Record<string, boolean>) => Logger;
+export declare const createLogger: (config?: LoggerConfig) => Logger;
 export default createLogger;

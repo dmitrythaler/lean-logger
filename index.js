@@ -18,16 +18,49 @@ const defaultConfig = {
 };
 const defaultChannels = ['info', 'warn', 'error', 'fatal'];
 //  ---------------------------------
-const buildLogFunc = (channel) => {
+const inject4Channel = (channel, ext) => {
+    return ((ext?.channels === '*' ||
+        ext?.channels === 'all' ||
+        ext?.channels === channel || (Array.isArray(ext?.channels) && (ext?.channels.includes('*') ||
+        ext?.channels.includes('all') ||
+        ext?.channels.includes(channel)))) && ext.inject) || null;
+};
+const buildLogFunc = (channel, ext) => {
     const severity = LEVELS[channel] || 10;
     const out = severity > 30 ? process.stderr : process.stdout;
+    const inject = inject4Channel(channel, ext);
+    if (!inject) {
+        return (...args) => {
+            const msg = JSON.stringify({
+                channel: channel.toUpperCase(),
+                severity,
+                time: Date.now(),
+                messages: [...args],
+            } /*, null, 2*/);
+            out.write(msg + '\n');
+            return msg;
+        };
+    }
+    if (typeof inject === 'function') {
+        return (...args) => {
+            const msg = JSON.stringify(inject({
+                channel: channel.toUpperCase(),
+                severity,
+                time: Date.now(),
+                messages: [...args],
+            }));
+            out.write(msg + '\n');
+            return msg;
+        };
+    }
     return (...args) => {
         const msg = JSON.stringify({
             channel: channel.toUpperCase(),
             severity,
             time: Date.now(),
+            ...inject,
             messages: [...args],
-        } /*, null, 2*/);
+        });
         out.write(msg + '\n');
         return msg;
     };
@@ -73,7 +106,7 @@ const injectEnv = (cfg, envName) => {
     });
     return Object.keys(hash).filter(k => hash[k]);
 };
-const createLogger = (config = defaultConfig) => {
+const createLogger = (config = defaultConfig, ext) => {
     const dummyFunc = () => { };
     const channels = injectEnv({ ...defaultConfig, ...config }, 'LOG');
     const wildChannels = channels.filter(ch => ch.endsWith('*')).map(ch => ch.slice(0, -1));
@@ -84,10 +117,10 @@ const createLogger = (config = defaultConfig) => {
                 return func;
             }
             const found = wildChannels.find(wch => ch.startsWith(wch));
-            return found ? buildLogFunc(ch) : dummyFunc;
+            return found ? buildLogFunc(ch, ext) : dummyFunc;
         }
     };
-    channels.forEach(ch => logger[ch] = buildLogFunc(ch));
+    channels.forEach(ch => logger[ch] = buildLogFunc(ch, ext));
     const handler = {
         get: (target, prop) => target[prop] || dummyFunc
     };

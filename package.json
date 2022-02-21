@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest --forceExit --detectOpenHandles --runInBand --bail=1"
   },
   "devDependencies": {
     "@types/jest": "^27.4.0",

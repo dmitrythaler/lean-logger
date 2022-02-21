@@ -21,6 +21,7 @@ const testChannel = (logger: T.Logger, ch: string) => {
   assert.ok(Date.now() - data.time < 10)
   assert.strictEqual(data.messages[0], 'information')
   assert.strictEqual(data.messages[1].ok, false)
+  return data
 }
 
 const testDeadChannel = (logger: T.Logger, ch: string) => {
@@ -132,5 +133,45 @@ describe('Lean Logger usage suite', () => {
     assert.strictEqual(info, undefined)
     info = channel4('some useless information', { msg: 'void' }) as string
     assert.strictEqual(info, undefined)
+  })
+
+  it('should extend channels and log with object injection', () => {
+    const logger: T.Logger = L.createLogger(cfg, {
+      channels: '*',
+      inject: { service: 'TEST-RIG' }
+    })
+    let data = testChannel(logger, 'info')
+    assert.strictEqual(data.service,'TEST-RIG')
+    data = testChannel(logger, 'error')
+    assert.strictEqual(data.service,'TEST-RIG')
+    data = testChannel(logger, 'warn')
+    assert.strictEqual(data.service,'TEST-RIG')
+  })
+
+  it('should extend channels and log with function injection', () => {
+    const logger: T.Logger = L.createLogger(cfg, {
+      channels: ['all'],
+      inject: data => { data.pid = process.pid; return data }
+    })
+    const pid = process.pid
+    let data = testChannel(logger, 'info')
+    assert.strictEqual(data.pid,pid)
+    data = testChannel(logger, 'error')
+    assert.strictEqual(data.pid,pid)
+    data = testChannel(logger, 'warn')
+    assert.strictEqual(data.pid,pid)
+  })
+
+  it('should extend only selected channels and log with injection', () => {
+    const logger: T.Logger = L.createLogger(cfg, {
+      channels: ['error', 'warn'],
+      inject: { service: 'TEST-RIG' }
+    })
+    let data = testChannel(logger, 'info')
+    assert.strictEqual(data.service, undefined)
+    data = testChannel(logger, 'error')
+    assert.strictEqual(data.service, 'TEST-RIG')
+    data = testChannel(logger, 'warn')
+    assert.strictEqual(data.service, 'TEST-RIG')
   })
 })

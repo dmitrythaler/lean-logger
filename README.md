@@ -1,11 +1,11 @@
-## lean-logger
+# lean-logger
 Dead simple, configurable, console/json-only logging for node.js
 
-### Install
+## Install
 ```
-npm i -S "git://github.com/dmitrythaler/lean-logger#v3.0.0"
+npm i -S "git://github.com/dmitrythaler/lean-logger#v3.2.0"
 ```
-### Use
+## Use
 ```javascript
 import { createLogger } from 'lean-logger'
 const logger = createLogger()
@@ -15,14 +15,14 @@ const logger = createLogger()
   logger.debug('Debug info', process.env)
   ...
 ```
-which leads to the following
+which prints
 ```console
 {"channel":"WARN","severity":30,"time":1629615224513,"messages":["Hi there, got some issue",{...someIssueData}]}
 {"channel":"INFO","severity":20,"time":1629615224513,"messages":["It's ok now",{...someData}]}
 ```
 `logger.debug` prints nothing as it's inactive by default
 
-### Config
+## Config
 Empty configuration means these defaults:
 ```javascript
 const logger = createLogger({
@@ -53,7 +53,7 @@ const logger = createLogger({
   request: true
 })
 ```
-### Non-existent channels
+## Non-existent channels
 The logger can be used with any channel, including non-existent:
 ```javascript
 const logger = createLogger()
@@ -63,7 +63,7 @@ logger.sooStupid('I like Old Grand-Dad Bourbon', url)
 ```
 It outputs nothing and doesn't throw. Don't bother with including all possible channels in the configuration - you can activate it with environment variable.
 
-### Configuration with ENV
+## Configuration with ENV
 Use `LOG` env variable to manage logging
 ```console
 LOG=(+|-|)(channelName|all),(+|-|)(channelName|all|*),... node your-app
@@ -99,7 +99,7 @@ LOG=-all,sooStupid node your-app
 ```
 Default channels all dead but everyone knows you like bourbon
 
-### Extract channel and "wild" activation
+## Extract channel and "wild" activation
 ```javascript
 import { createLogger } from 'lean-logger'
 const logger = createLogger({ ... })
@@ -133,7 +133,25 @@ And to see all logs for the `square` module it's enough to set
 ```console
 LOG=square:* node your-app
 ```
+## Extend channels
+```javascript
+const logger = createLogger({
+  // ...
+  }, {
+    channels: '*', // string or string[], channel name(s) or '*' or 'all'
+    inject: { service: 'AUTH-SERVICE' }
+  })
+// ... somewhere
+logger.info(`User ${uid}, password updated`, ...blah)
+```
+now it outputs
+```console
+{"channel":"INFO","service":"AUTH-SERVICE","severity":20,"time":1629615224513,"messages":["User XYZ, password upfated",{...blah}]}
 
+```
+The `inject` param can be object or function that receives LoggerData and extends it with arbitrary info.
+
+## Bits and pieces
 ### Channel severity
 ```
 LOG=warn+
@@ -146,3 +164,4 @@ For debug fancy printing install `jq` then update your dev scripts in `package.j
     "dev:jq": "npm run dev 2>&1 | jq -c -R 'fromjson?'",
 ```
 That `2>&1` part combines `stdout` and `stderr`, and the `... -R 'fromjson?'` lets `jq` to ignore non-json output.
+

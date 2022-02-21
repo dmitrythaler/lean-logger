@@ -1,4 +1,3 @@
-
 export type LoggerData = {
   channel: string,
   severity: number,
@@ -96,7 +95,6 @@ export const createLogger = (config = defaultConfig): Logger => {
   const logger = {
     channel: function (ch: string): LoggerFunc {
       const func = logger[ch]
-      // console.log('+++ wilds', wildChannels, func)
       if (func && func !== dummyFunc) {
         return func
       }

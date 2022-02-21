@@ -80,7 +80,6 @@ const createLogger = (config = defaultConfig) => {
     const logger = {
         channel: function (ch) {
             const func = logger[ch];
-            // console.log('+++ wilds', wildChannels, func)
             if (func && func !== dummyFunc) {
                 return func;
             }

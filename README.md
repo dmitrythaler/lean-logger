@@ -1,5 +1,5 @@
 # lean-logger
-Lean-logger is a nodejs 0-dependency logger, doing only json logging, to only console. It's configurable mainly with ENV variables. 0-bullshit and based on The Twelve-Factor App methodology.
+Lean-logger is a nodejs logger, doing only logging, only json to only console. It's configurable mainly with ENV variables. 0-dependency, 0-bullshit and based on [The Twelve-Factor App](https://12factor.net/logs) methodology.
 
 ## Install
 ```bash

@@ -1,9 +1,11 @@
 # lean-logger
-Dead simple, configurable, console/json-only logging for node.js
+Lean-logger is a nodejs 0-dependency logger, doing only json logging, to only console. It's configurable mainly with ENV variables. 0-bullshit and based on The Twelve-Factor App methodology.
 
 ## Install
-```
-npm i -S "git://github.com/dmitrythaler/lean-logger#v3.2.0"
+```bash
+npm i -S lean-logger
+# or
+yarn add lean-logger
 ```
 ## Use
 ```javascript
@@ -53,13 +55,19 @@ const logger = createLogger({
   request: true
 })
 ```
+If you want to silence e.g. `info` channel you'll need to do it explicitly -
+```javascript
+const logger = createLogger({
+  info: false
+})
+```
 ## Non-existent channels
 The logger can be used with any channel, including non-existent:
 ```javascript
 const logger = createLogger()
 // ... somewhere later
 logger.noSuchChannel(req.ip, req.method, req.originalUrl, res.statusCode)
-logger.sooStupid('I like Old Grand-Dad Bourbon', url)
+logger.shrift('I like Old Grand-Dad Bourbon', url)
 ```
 It outputs nothing and doesn't throw. Don't bother with including all possible channels in the configuration - you can activate it with environment variable.
 
@@ -95,9 +103,9 @@ LOG=-info,-warn,+http node your-app
 Default channels without info and warn plus http channel
 
 ```console
-LOG=-all,sooStupid node your-app
+LOG=-all,shrift node your-app
 ```
-Default channels all dead but everyone knows you like bourbon
+Default channels all dead but everyone knows you like Bourbon.
 
 ## Extract channel and "wild" activation
 ```javascript

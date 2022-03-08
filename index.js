@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createLogger = void 0;
-//  ----------------------------------------------------------------------------------------------//
-const LEVELS = {
+//  ---------------------------------
+const severityLevels = {
     debug: 10,
     info: 20,
     warn: 30,
@@ -17,19 +17,33 @@ const defaultConfig = {
     fatal: true
 };
 const defaultChannels = ['info', 'warn', 'error', 'fatal'];
-//  ---------------------------------
-const inject4Channel = (channel, ext) => {
+/**
+ * Checks if mixin is valid for the channel and returns it, or null if not
+ *
+ * @param {string} channel - channel like 'info' or 'error'
+ * @param {LoggerMixin} [ext] - optional logging data extender
+ * @returns {(MixinFunc|Object|null)}
+ */
+const mixin4Channel = (channel, ext) => {
     return ((ext?.channels === '*' ||
         ext?.channels === 'all' ||
         ext?.channels === channel || (Array.isArray(ext?.channels) && (ext?.channels.includes('*') ||
         ext?.channels.includes('all') ||
-        ext?.channels.includes(channel)))) && ext.inject) || null;
+        ext?.channels.includes(channel)))) && ext.mixin) || null;
 };
+/**
+ * Builds logging function
+ *
+ * @param {string} channel - channel like 'info' or 'error'
+ * @param {LoggerMixin} [ext] - optional logging data extender
+ * @returns {LoggerFunc}
+ */
 const buildLogFunc = (channel, ext) => {
-    const severity = LEVELS[channel] || 10;
+    const severity = severityLevels[channel] || 10;
     const out = severity > 30 ? process.stderr : process.stdout;
-    const inject = inject4Channel(channel, ext);
-    if (!inject) {
+    const mixin = mixin4Channel(channel, ext);
+    // mixin not provided or not valid for this channel
+    if (!mixin) {
         return (...args) => {
             const msg = JSON.stringify({
                 channel: channel.toUpperCase(),
@@ -41,9 +55,10 @@ const buildLogFunc = (channel, ext) => {
             return msg;
         };
     }
-    if (typeof inject === 'function') {
+    // mixin is a function
+    if (typeof mixin === 'function') {
         return (...args) => {
-            const msg = JSON.stringify(inject({
+            const msg = JSON.stringify(mixin({
                 channel: channel.toUpperCase(),
                 severity,
                 time: Date.now(),
@@ -53,20 +68,28 @@ const buildLogFunc = (channel, ext) => {
             return msg;
         };
     }
+    // mixin is a plain object
     return (...args) => {
         const msg = JSON.stringify({
             channel: channel.toUpperCase(),
             severity,
             time: Date.now(),
-            ...inject,
+            ...mixin,
             messages: [...args],
         });
         out.write(msg + '\n');
         return msg;
     };
 };
-const injectEnv = (cfg, envName) => {
-    const envParams = process.env[envName];
+/**
+ * Parses env variable LOG(LOGGER,DEBUG),  and returns list of active channels
+ *
+ * @param {LoggerConfig} cfg - logger config
+ * @returns {string[]}
+ */
+const activeChannelsList = (cfg) => {
+    const env = process.env;
+    const envParams = env['LOG'] || env['LOGGER'] || env['DEBUG'];
     let hash = { ...cfg };
     if (!envParams) {
         return Object.keys(hash).filter(k => hash[k]);
@@ -94,37 +117,48 @@ const injectEnv = (cfg, envName) => {
             else if (channel.endsWith('+')) {
                 // channel in cfg ends with [+] means least severity level
                 channel = channel.slice(0, -1);
-                if (LEVELS[channel]) {
-                    Object.keys(hash).forEach(ch => hash[ch] = LEVELS[ch] >= LEVELS[channel]);
+                if (severityLevels[channel]) {
+                    Object.keys(hash).forEach(ch => hash[ch] = severityLevels[ch] >= severityLevels[channel]);
                 }
             }
             else {
-                // create channel
+                // create/activate channel
                 hash[channel] = true;
             }
         }
     });
     return Object.keys(hash).filter(k => hash[k]);
 };
-const createLogger = (config = defaultConfig, ext) => {
+/**
+ * Creates logger from config and mixin
+ *
+ * @param {LoggerConfig} [config] - logger config, optional
+ * @param {LoggerMixin} [mix] - mixin, optional
+ * @returns {Logger}
+ */
+const createLogger = (config = defaultConfig, mix) => {
     const dummyFunc = () => { };
-    const channels = injectEnv({ ...defaultConfig, ...config }, 'LOG');
+    const channels = activeChannelsList({ ...defaultConfig, ...config });
     const wildChannels = channels.filter(ch => ch.endsWith('*')).map(ch => ch.slice(0, -1));
     const logger = {
+        // returns channel with the given name
         channel: function (ch) {
             const func = logger[ch];
             if (func && func !== dummyFunc) {
                 return func;
             }
+            // channel not found, checks wilds - channels ending with '*'
             const found = wildChannels.find(wch => ch.startsWith(wch));
-            return found ? buildLogFunc(ch, ext) : dummyFunc;
+            return found ? buildLogFunc(ch, mix) : dummyFunc;
         }
     };
-    channels.forEach(ch => logger[ch] = buildLogFunc(ch, ext));
+    channels.forEach(ch => logger[ch] = buildLogFunc(ch, mix));
+    // the Proxy allows call non-existent channels: if channel doesn't exist it invokes dummy func
     const handler = {
         get: (target, prop) => target[prop] || dummyFunc
     };
     return new Proxy(logger, handler);
 };
 exports.createLogger = createLogger;
+//  ---------------------------------
 exports.default = exports.createLogger;

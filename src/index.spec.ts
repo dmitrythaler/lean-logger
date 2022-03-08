@@ -68,6 +68,23 @@ describe('Lean Logger usage suite', () => {
     testDeadChannel(logger, 'request')
   })
 
+  it('should be configurable also via ENV vars DEBUG and LOGGER', () => {
+    process.env.LOGGER = 'test,service'
+    let logger: T.Logger = L.createLogger()
+    testChannel(logger, 'service')
+    testChannel(logger, 'test')
+    testChannel(logger, 'info')
+    testDeadChannel(logger, 'request')
+
+    process.env.LOGGER = undefined
+    process.env.DEBUG = 'test,service'
+    logger = L.createLogger()
+    testChannel(logger, 'service')
+    testChannel(logger, 'test')
+    testChannel(logger, 'info')
+    testDeadChannel(logger, 'request')
+  })
+
   it('should be configurable via ENV, explicitly activate', () => {
     process.env.LOG = '-all,request,+fatal'
     let logger: T.Logger = L.createLogger(cfg)

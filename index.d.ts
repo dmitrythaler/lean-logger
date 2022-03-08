@@ -10,11 +10,18 @@ export declare type LoggerFunc = (...args: any[]) => string | void;
 export declare type LoggerFuncGen = (ch: string) => LoggerFunc;
 export declare type Logger = {
     channel: LoggerFuncGen;
-} & Record<string, LoggerFunc>;
-export declare type InjectFunc = (LoggerData: any) => LoggerData & Keyed;
-export declare type LoggerExt = {
+} & Keyed<LoggerFunc>;
+export declare type MixinFunc = (LoggerData: any) => LoggerData & Keyed;
+export declare type LoggerMixin = {
     channels: string | string[];
-    inject: Keyed | InjectFunc;
+    mixin: Keyed | MixinFunc;
 };
-export declare const createLogger: (config?: LoggerConfig, ext?: LoggerExt) => Logger;
+/**
+ * Creates logger from config and mixin
+ *
+ * @param {LoggerConfig} [config] - logger config, optional
+ * @param {LoggerMixin} [mix] - mixin, optional
+ * @returns {Logger}
+ */
+export declare const createLogger: (config?: LoggerConfig, mix?: LoggerMixin) => Logger;
 export default createLogger;

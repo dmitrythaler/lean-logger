@@ -56,6 +56,18 @@ describe('Lean Logger usage suite', () => {
     testDeadChannel(logger, '***12345')
   })
 
+  it('should be configurable via ENV', () => {
+    process.env.LOG = 'test,service'
+    let logger: T.Logger = L.createLogger()
+    testChannel(logger, 'service')
+    testChannel(logger, 'test')
+    testChannel(logger, 'info')
+    testChannel(logger, 'warn')
+    testChannel(logger, 'error')
+    testChannel(logger, 'fatal')
+    testDeadChannel(logger, 'request')
+  })
+
   it('should be configurable via ENV, explicitly activate', () => {
     process.env.LOG = '-all,request,+fatal'
     let logger: T.Logger = L.createLogger(cfg)
@@ -135,10 +147,10 @@ describe('Lean Logger usage suite', () => {
     assert.strictEqual(info, undefined)
   })
 
-  it('should extend channels and log with object injection', () => {
+  it('should extend channels and log with object mixin', () => {
     const logger: T.Logger = L.createLogger(cfg, {
       channels: '*',
-      inject: { service: 'TEST-RIG' }
+      mixin: { service: 'TEST-RIG' }
     })
     let data = testChannel(logger, 'info')
     assert.strictEqual(data.service,'TEST-RIG')
@@ -148,10 +160,10 @@ describe('Lean Logger usage suite', () => {
     assert.strictEqual(data.service,'TEST-RIG')
   })
 
-  it('should extend channels and log with function injection', () => {
+  it('should extend channels and log with function mixin', () => {
     const logger: T.Logger = L.createLogger(cfg, {
       channels: ['all'],
-      inject: data => { data.pid = process.pid; return data }
+      mixin: data => { data.pid = process.pid; return data }
     })
     const pid = process.pid
     let data = testChannel(logger, 'info')
@@ -162,10 +174,10 @@ describe('Lean Logger usage suite', () => {
     assert.strictEqual(data.pid,pid)
   })
 
-  it('should extend only selected channels and log with injection', () => {
+  it('should extend only selected channels and log with mixin', () => {
     const logger: T.Logger = L.createLogger(cfg, {
       channels: ['error', 'warn'],
-      inject: { service: 'TEST-RIG' }
+      mixin: { service: 'TEST-RIG' }
     })
     let data = testChannel(logger, 'info')
     assert.strictEqual(data.service, undefined)

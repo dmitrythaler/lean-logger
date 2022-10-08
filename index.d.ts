@@ -1,6 +1,5 @@
 export declare type LoggerData = {
     channel: string;
-    severity: number;
     time: number;
     data: any[];
 };

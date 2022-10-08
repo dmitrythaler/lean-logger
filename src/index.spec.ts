@@ -103,16 +103,6 @@ describe('Lean Logger usage suite', () => {
     testChannel(logger, 'request')
   })
 
-  it('should be configurable via ENV, min severity level', () => {
-    process.env.LOG = 'warn+'
-    let logger: T.Logger = L.createLogger(cfg)
-    testDeadChannel(logger, 'info')
-    testDeadChannel(logger, 'request')
-    testChannel(logger, 'warn')
-    testChannel(logger, 'error')
-    testChannel(logger, 'fatal')
-  })
-
   it('should extract channel and log to', () => {
     process.env.LOG = 'test'
     let logger: T.Logger = L.createLogger(cfg)

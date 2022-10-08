@@ -2,3 +2,5 @@ node_modules/
 sandbox/
 *.log
 .editorconfig
+.yarn/
+.yarnrc.yml

@@ -1,6 +1,5 @@
 export type LoggerData = {
   channel: string,
-  severity: number,
   time: number,
   data: any[]
 }
@@ -22,14 +21,6 @@ export type LoggerMixin = {
 
 //  ---------------------------------
 
-const severityLevels = {
-  debug: 10,
-  info: 20,
-  warn: 30,
-  error: 40,
-  fatal: 50
-}
-
 const defaultConfig: LoggerConfig = {
   debug: false,
   info: true,
@@ -39,6 +30,7 @@ const defaultConfig: LoggerConfig = {
 }
 
 const defaultChannels = ['info', 'warn', 'error', 'fatal']
+const errorChannels = ['error', 'fatal', 'fuckup']
 
 /**
  * Checks if mixin is valid for the channel and returns it, or null if not
@@ -71,8 +63,7 @@ const mixin4Channel = (channel: string, ext?: LoggerMixin): null | Keyed | Mixin
  * @returns {LoggerFunc}
  */
 const buildLogFunc = (channel: string, ext?: LoggerMixin): LoggerFunc => {
-  const severity = severityLevels[channel] || 10
-  const out = severity > 30 ? process.stderr : process.stdout
+  const out = errorChannels.includes(channel) ? process.stderr : process.stdout
   const mixin = mixin4Channel(channel, ext)
 
   // mixin not provided or not valid for this channel
@@ -80,7 +71,6 @@ const buildLogFunc = (channel: string, ext?: LoggerMixin): LoggerFunc => {
     return (...args: any[]) => {
       const msg = JSON.stringify({
         channel: channel.toUpperCase(),
-        severity,
         time: Date.now(),
         messages: [...args],
       }/*, null, 2*/)
@@ -94,7 +84,6 @@ const buildLogFunc = (channel: string, ext?: LoggerMixin): LoggerFunc => {
     return (...args: any[]) => {
       const msg = JSON.stringify((mixin as MixinFunc)({
         channel: channel.toUpperCase(),
-        severity,
         time: Date.now(),
         messages: [...args],
       }))
@@ -107,7 +96,6 @@ const buildLogFunc = (channel: string, ext?: LoggerMixin): LoggerFunc => {
   return (...args: any[]) => {
     const msg = JSON.stringify({
       channel: channel.toUpperCase(),
-      severity,
       time: Date.now(),
       ...(mixin as Keyed),
       messages: [...args],
@@ -148,12 +136,6 @@ const activeChannelsList = (cfg: LoggerConfig): string[] => {
       if (channel === '*' || channel === 'all') {
         // all default channels
         defaultChannels.forEach(ch => hash[ch] = true)
-      } else if (channel.endsWith('+')) {
-        // channel in cfg ends with [+] means least severity level
-        channel = channel.slice(0, -1)
-        if (severityLevels[channel]) {
-          Object.keys(hash).forEach(ch => hash[ch] = severityLevels[ch] >= severityLevels[channel])
-        }
       } else {
         // create/activate channel
         hash[channel] = true

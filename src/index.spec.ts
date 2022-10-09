@@ -32,26 +32,26 @@ const testDeadChannel = (logger: T.Logger, ch: string) => {
 describe('Lean Logger usage suite', () => {
 
   it('should log to default channels', () => {
-    const logger: T.Logger = L.createLogger(cfg)
+    const logger: T.Logger = L.createLogger({ config: cfg })
     testChannel(logger, 'info')
     testChannel(logger, 'error')
     testChannel(logger, 'warn')
   })
 
   it('should log to added channels', () => {
-    const logger: T.Logger = L.createLogger(cfg)
+    const logger: T.Logger = L.createLogger({ config: cfg })
     testChannel(logger, 'request')
     testChannel(logger, 'emptiness')
   })
 
   it('shouldn\'t log to inactive channels', () => {
-    const logger: T.Logger = L.createLogger(cfg)
+    const logger: T.Logger = L.createLogger({ config: cfg })
     testDeadChannel(logger, 'silent')
     testDeadChannel(logger, 'debug')
   })
 
   it('shouldn\'t log to non-existent channels and shouldn\'t throw', () => {
-    const logger: T.Logger = L.createLogger(cfg)
+    const logger: T.Logger = L.createLogger({ config: cfg })
     testDeadChannel(logger, 'noSuchChannel')
     testDeadChannel(logger, '***12345')
   })
@@ -87,7 +87,7 @@ describe('Lean Logger usage suite', () => {
 
   it('should be configurable via ENV, explicitly activate', () => {
     process.env.LOG = '-all,request,+fatal'
-    let logger: T.Logger = L.createLogger(cfg)
+    let logger: T.Logger = L.createLogger({ config: cfg })
     testChannel(logger, 'request')
     testChannel(logger, 'fatal')
     testDeadChannel(logger, 'info')
@@ -96,7 +96,7 @@ describe('Lean Logger usage suite', () => {
 
   it('should be configurable via ENV, explicitly deactivate', () => {
     process.env.LOG = 'all,-info'
-    let logger: T.Logger = L.createLogger(cfg)
+    let logger: T.Logger = L.createLogger({ config: cfg })
     testDeadChannel(logger, 'debug')
     testDeadChannel(logger, 'info')
     testChannel(logger, 'warn')
@@ -105,8 +105,8 @@ describe('Lean Logger usage suite', () => {
 
   it('should extract channel and log to', () => {
     process.env.LOG = 'test'
-    let logger: T.Logger = L.createLogger(cfg)
-    let channel: T.LoggerFunc = logger.channel('test')
+    let logger: T.Logger = L.createLogger({ config: cfg })
+    let channel: T.LoggerFunc = logger.getChannel('test')
     const now = Date.now()
 
     let info = channel('some information', { msg: 'hi there' }) as string
@@ -117,19 +117,19 @@ describe('Lean Logger usage suite', () => {
     assert.strictEqual(data.messages[1].msg, 'hi there')
 
     process.env.LOG = 'something-else'
-    logger = L.createLogger(cfg)
-    channel = logger.channel('test')
+    logger = L.createLogger({ config: cfg })
+    channel = logger.getChannel('test')
     info = channel('some information', { msg: 'hi there' }) as string
     assert.strictEqual(info, undefined)
   })
 
   it('should extract wild channels and log to', () => {
     process.env.LOG = 'module:*'
-    let logger: T.Logger = L.createLogger(cfg)
-    const channel1: T.LoggerFunc = logger.channel('module:db')
-    const channel2: T.LoggerFunc = logger.channel('module:auth')
-    const channel3: T.LoggerFunc = logger.channel('module/err')
-    const channel4: T.LoggerFunc = logger.channel('module')
+    let logger: T.Logger = L.createLogger({ config: cfg })
+    const channel1: T.LoggerFunc = logger.getChannel('module:db')
+    const channel2: T.LoggerFunc = logger.getChannel('module:auth')
+    const channel3: T.LoggerFunc = logger.getChannel('module/err')
+    const channel4: T.LoggerFunc = logger.getChannel('module')
     const now = Date.now()
 
     let info = channel1('some information', { msg: 'hi there' }) as string
@@ -155,9 +155,12 @@ describe('Lean Logger usage suite', () => {
   })
 
   it('should extend channels and log with object mixin', () => {
-    const logger: T.Logger = L.createLogger(cfg, {
-      channels: '*',
-      mixin: { service: 'TEST-RIG' }
+    const logger: T.Logger = L.createLogger({
+      config: cfg,
+      mix: {
+        channels: '*',
+        mixin: { service: 'TEST-RIG' }
+      }
     })
     let data = testChannel(logger, 'info')
     assert.strictEqual(data.service,'TEST-RIG')
@@ -168,9 +171,12 @@ describe('Lean Logger usage suite', () => {
   })
 
   it('should extend channels and log with function mixin', () => {
-    const logger: T.Logger = L.createLogger(cfg, {
-      channels: ['all'],
-      mixin: data => { data.pid = process.pid; return data }
+    const logger: T.Logger = L.createLogger({
+      config: cfg,
+      mix: {
+        channels: ['all'],
+        mixin: data => { data.pid = process.pid; return data }
+      }
     })
     const pid = process.pid
     let data = testChannel(logger, 'info')
@@ -182,9 +188,12 @@ describe('Lean Logger usage suite', () => {
   })
 
   it('should extend only selected channels and log with mixin', () => {
-    const logger: T.Logger = L.createLogger(cfg, {
-      channels: ['error', 'warn'],
-      mixin: { service: 'TEST-RIG' }
+    const logger: T.Logger = L.createLogger({
+      config: cfg,
+      mix: {
+        channels: ['error', 'warn'],
+        mixin: { service: 'TEST-RIG' }
+      }
     })
     let data = testChannel(logger, 'info')
     assert.strictEqual(data.service, undefined)

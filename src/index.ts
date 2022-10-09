@@ -4,13 +4,17 @@ export type LoggerData = {
   data: any[]
 }
 
-export type LoggerConfig = Record<string, boolean>
+export type LoggerConfig = {
+  getChannel?: never,
+  [k: string]: boolean
+}
+
 type Keyed<T = unknown> = Record<string, T>
 
 export type LoggerFunc = (...args: any[]) => string | void
 export type LoggerFuncGen = (ch: string) => LoggerFunc
 export type Logger = {
-  channel: LoggerFuncGen
+  getChannel: LoggerFuncGen
 } & Keyed<LoggerFunc>
 
 export type MixinFunc = (LoggerData) => LoggerData & Keyed
@@ -22,14 +26,12 @@ export type LoggerMixin = {
 //  ---------------------------------
 
 const defaultConfig: LoggerConfig = {
-  debug: false,
   info: true,
   warn: true,
   error: true,
   fatal: true
 }
 
-const defaultChannels = ['info', 'warn', 'error', 'fatal']
 const errorChannels = ['error', 'fatal', 'fuckup']
 
 /**
@@ -106,7 +108,7 @@ const buildLogFunc = (channel: string, ext?: LoggerMixin): LoggerFunc => {
 }
 
 /**
- * Parses env variable LOG(LOGGER,DEBUG),  and returns list of active channels
+ * Parses env variable LOG(LOGGER,DEBUG) and returns list of active channels
  *
  * @param {LoggerConfig} cfg - logger config
  * @returns {string[]}
@@ -135,7 +137,7 @@ const activeChannelsList = (cfg: LoggerConfig): string[] => {
       }
       if (channel === '*' || channel === 'all') {
         // all default channels
-        defaultChannels.forEach(ch => hash[ch] = true)
+        Object.keys(defaultConfig).forEach(ch => hash[ch] = true)
       } else {
         // create/activate channel
         hash[channel] = true
@@ -152,15 +154,15 @@ const activeChannelsList = (cfg: LoggerConfig): string[] => {
  * @param {LoggerMixin} [mix] - mixin, optional
  * @returns {Logger}
  */
-export const createLogger = (config = defaultConfig, mix?: LoggerMixin): Logger => {
+export const createLogger = ({ config = {}, mix }: { config?: LoggerConfig, mix?: LoggerMixin } = {}): Logger => {
   const dummyFunc = () => {}
   const channels = activeChannelsList({ ...defaultConfig, ...config })
   const wildChannels = channels.filter(ch => ch.endsWith('*')).map(ch => ch.slice(0, -1))
 
   const logger = {
-    // returns channel with the given name
-    channel: function (ch: string): LoggerFunc {
-      const func = logger[ch]
+    // returns channel with the given name, if channel is not active then it
+    getChannel: function (ch: string): LoggerFunc {
+      const func = this[ch]
       if (func && func !== dummyFunc) {
         return func
       }

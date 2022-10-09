@@ -3,13 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createLogger = void 0;
 //  ---------------------------------
 const defaultConfig = {
-    debug: false,
     info: true,
     warn: true,
     error: true,
     fatal: true
 };
-const defaultChannels = ['info', 'warn', 'error', 'fatal'];
 const errorChannels = ['error', 'fatal', 'fuckup'];
 /**
  * Checks if mixin is valid for the channel and returns it, or null if not
@@ -102,7 +100,7 @@ const activeChannelsList = (cfg) => {
             }
             if (channel === '*' || channel === 'all') {
                 // all default channels
-                defaultChannels.forEach(ch => hash[ch] = true);
+                Object.keys(defaultConfig).forEach(ch => hash[ch] = true);
             }
             else {
                 // create/activate channel
@@ -119,14 +117,14 @@ const activeChannelsList = (cfg) => {
  * @param {LoggerMixin} [mix] - mixin, optional
  * @returns {Logger}
  */
-const createLogger = (config = defaultConfig, mix) => {
+const createLogger = (config = {}, mix) => {
     const dummyFunc = () => { };
     const channels = activeChannelsList({ ...defaultConfig, ...config });
     const wildChannels = channels.filter(ch => ch.endsWith('*')).map(ch => ch.slice(0, -1));
     const logger = {
         // returns channel with the given name
-        channel: function (ch) {
-            const func = logger[ch];
+        getChannel: function (ch) {
+            const func = this[ch];
             if (func && func !== dummyFunc) {
                 return func;
             }

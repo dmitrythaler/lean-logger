@@ -3,7 +3,10 @@ export declare type LoggerData = {
     time: number;
     data: any[];
 };
-export declare type LoggerConfig = Record<string, boolean>;
+export declare type LoggerConfig = {
+    getChannel?: never;
+    [k: string]: boolean;
+};
 declare type Keyed<T = unknown> = Record<string, T>;
 export declare type LoggerFunc = (...args: any[]) => string | void;
 export declare type LoggerFuncGen = (ch: string) => LoggerFunc;
@@ -22,5 +25,5 @@ export declare type LoggerMixin = {
  * @param {LoggerMixin} [mix] - mixin, optional
  * @returns {Logger}
  */
-export declare const createLogger: (config?: LoggerConfig, mix?: LoggerMixin) => Logger;
+export declare const createLogger: (config?: {}, mix?: LoggerMixin) => Logger;
 export default createLogger;

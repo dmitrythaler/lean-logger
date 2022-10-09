@@ -1,13 +1,19 @@
 # lean-logger
-Lean-logger is a nodejs logger, doing only logging, only json to only console. It's configurable mainly with ENV variables. 0-dependency, 0-bullshit and based on [The Twelve-Factor App](https://12factor.net/logs) methodology.
+Lean-logger is a nodejs logger, doing only logging, only json to only console. It's configurable mainly with ENV variables. 0-dependency, 0-bullshit and based on [The Twelve-Factor App](https://12factor.net/logs) methodology. <br/>
 
-## Install
+Also I think that the "severity levels" approach is suitable only to very simple application: it is clear for everyone that "severity" of the `error` message is higher than that of `info` or `silly`, so we can control them by setting that level to show only messages with "equal" or "bigger" levels.
+But it is not so easy to separate when for ex. one needs to show database layer messages and keep silent stripe library messages - both types are about debug/info level. What of them are "bigger"? How to hide one and show another?
+
+That's why this logger does not contain levels at all - there are channels. The channel should be explicitly set as "active" via ENV var or config to output anything. Default channels are `info`, `warn`, `error` and `fatal` - they, on the contrary, should be explicitly silenced.
+
+So ...
+## To Install
 ```bash
 npm i -S lean-logger
 # or
 yarn add lean-logger
 ```
-## Use
+## To Use
 ```javascript
 import { createLogger } from 'lean-logger'
 const logger = createLogger()
@@ -19,65 +25,71 @@ const logger = createLogger()
 ```
 which prints
 ```console
-{"channel":"WARN","severity":30,"time":1629615224513,"messages":["Hi there, got some issue",{...someIssueData}]}
-{"channel":"INFO","severity":20,"time":1629615224513,"messages":["It's ok now",{...someData}]}
+{"channel":"WARN","time":1629615224513,"messages":["Hi there, got some issue",{...someIssueData}]}
+{"channel":"INFO","time":1629615224513,"messages":["It's ok now",{...someData}]}
 ```
 `logger.debug` prints nothing as it's inactive by default
 
-## Config
+## To Config
 Empty configuration means these defaults:
 ```javascript
 const logger = createLogger({
-  debug: false,
-  info: true,
-  warn: true,
-  error: true,
-  fatal: true
+  channels: {
+    info: true,
+    warn: true,
+    error: true,
+    fatal: true
+  }
 })
 ```
 This default configuration is being merged with that provided by user, so
 ```javascript
 const logger = createLogger({
   http: true,
-  request: true,
-  info: false
+  request: true
 })
 ```
 implicitly results in
 ```javascript
 const logger = createLogger({
-  debug: false,
-  info: false,
-  warn: true,
-  error: true,
-  fatal: true,
-  http: true,
-  request: true
+  channels: {
+    info: true,
+    warn: true,
+    error: true,
+    fatal: true,
+    http: true,
+    request: true
+  }
 })
 ```
-If you want to silence e.g. `info` channel you'll need to do it explicitly -
+If you want to silence default channel, e.g. `info` - you'll need to do it explicitly, like
 ```javascript
 const logger = createLogger({
-  info: false
+  channels: {
+    info: false,
+    warn: false,
+    stripe: true
+  }
 })
 ```
-## Non-existent channels
-The logger can be used with any channel, including non-existent:
+
+## To print to non-existent channels
+The logger can be used with any channel, including never defined:
 ```javascript
 const logger = createLogger()
 // ... somewhere later
 logger.noSuchChannel(req.ip, req.method, req.originalUrl, res.statusCode)
-logger.shrift('I like Old Grand-Dad Bourbon', url)
+logger.confession('I like Old Grand-Dad Bourbon', url)
 ```
-It outputs nothing and doesn't throw. Don't bother with including all possible channels in the configuration - you can activate it with environment variable.
+They output nothing and they don't throw anything like `TypeError: "confession" is not a function`. So one needs not to bother with including all possible channels in the configuration - they can be activated any time with environment variable or just kept them silent.
 
-## Configuration with ENV
+## To configure with ENV
 Use `LOG` env variable to manage logging
 ```console
 LOG=(+|-|)(channelName|all),(+|-|)(channelName|all|*),... node your-app
 ```
 "-" sign to deactivate channel, "+" or nothing to activate<br />
-"all" or "*" means all default channels, makes sense with "-"
+"all" or "*" means all default channels, only makes sense with "-"
 
 ```console
 LOG=* node your-app
@@ -103,25 +115,25 @@ LOG=-info,-warn,+http node your-app
 Default channels without info and warn plus http channel
 
 ```console
-LOG=-all,shrift node your-app
+LOG=-all,confession node your-app
 ```
-Default channels all dead but everyone knows you like Bourbon.
+Default channels all dead but now everyone knows you like Bourbon.
 
-## Extract channel and "wild" activation
+## To Extract channel and set active channels "wildly*"
 ```javascript
 import { createLogger } from 'lean-logger'
 const logger = createLogger({ ... })
 // extract channel to separate func
-const logMigration = logger.channel('migration')
+const logMigration = logger.getChannel('migration')
 // ... somewhere
 logMigration(`Migration ${name}, table ${table}, ${rNum} records`, someData, ...blah)
 ```
 This is particularly useful combined with wild channel activation:
 ```javascript
 const logger = createLogger({ ... })
-const logCard = logger.channel('square:card')
-const logPayment = logger.channel('square:pmnt')
-const logRefund = logger.channel('square:rfnd')
+const logCard = logger.getChannel('square:card')
+const logPayment = logger.getChannel('square:pmnt')
+const logRefund = logger.getChannel('square:rfnd')
 // ... somewhere
 logCard(`User ${uid}, card updated ${cardId}, ...`, ...blah)
 // ...
@@ -141,35 +153,38 @@ And to see all logs for the `square` module it's enough to set
 ```console
 LOG=square:* node your-app
 ```
-## Extend channels
+## To Extend/Update channels' data
 ```javascript
 const logger = createLogger({
-  // ...
-  }, {
+  channels: {
+    // ...
+  },
+  mix: {
     channels: '*', // string or string[], channel name(s) or '*' or 'all'
-    inject: { service: 'AUTH-SERVICE' }
+    mixin: { service: 'AUTH-SERVICE' }
   })
 // ... somewhere
 logger.info(`User ${uid}, password updated`, ...blah)
 ```
 now it outputs
 ```console
-{"channel":"INFO","service":"AUTH-SERVICE","severity":20,"time":1629615224513,"messages":["User XYZ, password upfated",{...blah}]}
+{"channel":"INFO","service":"AUTH-SERVICE","time":1629615224513,"messages":["User XYZ, password upfated",{...blah}]}
 
 ```
-The `inject` param can be object or function that receives LoggerData and extends it with arbitrary info.
+The `mix` config parameter can be object or function that receives LoggerData and process it arbitrary way.
 
 ## Bits and pieces
+### Async output
+Those `logger.anything...` methods use `process.stdout|stderr` internally, so they are asynchronous.
 ### Channel severity
-```
-LOG=warn+
-```
-TBD...
+Channels named `error`, `fatal` and `fuckup` output to `stderr`.<br/>
+(shouldn't it be configurable?)
+
 ### Colored output
 For debug fancy printing install `jq` then update your dev scripts in `package.json` like this
 ```json
     "dev": "NODE_ENV=development ts-node-dev --no-notify src/server.ts",
-    "dev:jq": "npm run dev 2>&1 | jq -c -R 'fromjson?'",
+    "dev:jq": "yarn dev 2>&1 | jq -c -R 'fromjson?'",
 ```
 That `2>&1` part combines `stdout` and `stderr`, and the `... -R 'fromjson?'` lets `jq` to ignore non-json output.
 

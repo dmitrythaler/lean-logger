@@ -4,7 +4,7 @@ export type LoggerData = {
   data: any[]
 }
 
-export type LoggerConfig = {
+export type LoggerChannels = {
   getChannel?: never,
   [k: string]: boolean
 }
@@ -23,9 +23,14 @@ export type LoggerMixin = {
   mixin: Keyed | MixinFunc
 }
 
+export type LoggerConfig = {
+  channels?: LoggerChannels,
+  mix?: LoggerMixin
+}
+
 //  ---------------------------------
 
-const defaultConfig: LoggerConfig = {
+const defaultChannels: LoggerChannels = {
   info: true,
   warn: true,
   error: true,
@@ -41,19 +46,19 @@ const errorChannels = ['error', 'fatal', 'fuckup']
  * @param {LoggerMixin} [ext] - optional logging data extender
  * @returns {(MixinFunc|Object|null)}
  */
-const mixin4Channel = (channel: string, ext?: LoggerMixin): null | Keyed | MixinFunc => {
+const mixin4Channel = (channel: string, mix?: LoggerMixin): null | Keyed | MixinFunc => {
   return (
     (
-      ext?.channels === '*' ||
-      ext?.channels === 'all' ||
-      ext?.channels === channel || (
-        Array.isArray(ext?.channels) && (
-          ext?.channels.includes('*') ||
-          ext?.channels.includes('all') ||
-          ext?.channels.includes(channel)
+      mix?.channels === '*' ||
+      mix?.channels === 'all' ||
+      mix?.channels === channel || (
+        Array.isArray(mix?.channels) && (
+          mix?.channels.includes('*') ||
+          mix?.channels.includes('all') ||
+          mix?.channels.includes(channel)
         )
       )
-    ) && ext.mixin
+    ) && mix.mixin
   ) || null
 }
 
@@ -61,12 +66,12 @@ const mixin4Channel = (channel: string, ext?: LoggerMixin): null | Keyed | Mixin
  * Builds logging function
  *
  * @param {string} channel - channel like 'info' or 'error'
- * @param {LoggerMixin} [ext] - optional logging data extender
+ * @param {LoggerMixin} [mix] - optional logging data extender
  * @returns {LoggerFunc}
  */
-const buildLogFunc = (channel: string, ext?: LoggerMixin): LoggerFunc => {
+const buildLogFunc = (channel: string, mix?: LoggerMixin): LoggerFunc => {
   const out = errorChannels.includes(channel) ? process.stderr : process.stdout
-  const mixin = mixin4Channel(channel, ext)
+  const mixin = mixin4Channel(channel, mix)
 
   // mixin not provided or not valid for this channel
   if (!mixin) {
@@ -110,13 +115,13 @@ const buildLogFunc = (channel: string, ext?: LoggerMixin): LoggerFunc => {
 /**
  * Parses env variable LOG(LOGGER,DEBUG) and returns list of active channels
  *
- * @param {LoggerConfig} cfg - logger config
+ * @param {LoggerChannels} channels - logger channels hash
  * @returns {string[]}
  */
-const activeChannelsList = (cfg: LoggerConfig): string[] => {
+const activeChannelsList = (channels: LoggerChannels): string[] => {
   const env = process.env
   const envParams = env['LOG'] || env['LOGGER'] || env['DEBUG']
-  let hash = { ...cfg }
+  let hash = { ...channels }
   if (!envParams) {
     return Object.keys(hash).filter(k => hash[k])
   }
@@ -126,7 +131,7 @@ const activeChannelsList = (cfg: LoggerConfig): string[] => {
       // starts with [-] - deactivate
       channel = channel.slice(1)
       if (channel === '*' || channel === 'all') {
-        hash = {} as LoggerConfig
+        hash = {} as LoggerChannels
       } else if (hash[channel]) {
         hash[channel] = false
       }
@@ -137,7 +142,7 @@ const activeChannelsList = (cfg: LoggerConfig): string[] => {
       }
       if (channel === '*' || channel === 'all') {
         // all default channels
-        Object.keys(defaultConfig).forEach(ch => hash[ch] = true)
+        Object.keys(defaultChannels).forEach(ch => hash[ch] = true)
       } else {
         // create/activate channel
         hash[channel] = true
@@ -150,13 +155,12 @@ const activeChannelsList = (cfg: LoggerConfig): string[] => {
 /**
  * Creates logger from config and mixin
  *
- * @param {LoggerConfig} [config] - logger config, optional
- * @param {LoggerMixin} [mix] - mixin, optional
+ * @param {LoggerConfig} [config] - logger config
  * @returns {Logger}
  */
-export const createLogger = ({ config = {}, mix }: { config?: LoggerConfig, mix?: LoggerMixin } = {}): Logger => {
+export const createLogger = (config: LoggerConfig = {}): Logger => {
   const dummyFunc = () => {}
-  const channels = activeChannelsList({ ...defaultConfig, ...config })
+  const channels = activeChannelsList({ ...defaultChannels, ...config.channels } as LoggerChannels)
   const wildChannels = channels.filter(ch => ch.endsWith('*')).map(ch => ch.slice(0, -1))
 
   const logger = {
@@ -168,11 +172,11 @@ export const createLogger = ({ config = {}, mix }: { config?: LoggerConfig, mix?
       }
       // channel not found, checks wilds - channels ending with '*'
       const found = wildChannels.find(wch => ch.startsWith(wch))
-      return found ? buildLogFunc(ch, mix) : dummyFunc
+      return found ? buildLogFunc(ch, config.mix) : dummyFunc
     }
   }
 
-  channels.forEach(ch => logger[ch] = buildLogFunc(ch, mix))
+  channels.forEach(ch => logger[ch] = buildLogFunc(ch, config.mix))
 
   // the Proxy allows call non-existent channels: if channel doesn't exist it invokes dummy func
   const handler = {

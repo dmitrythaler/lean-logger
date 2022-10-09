@@ -1,6 +1,6 @@
 {
   "name": "lean-logger",
-  "version": "3.2.2",
+  "version": "4.0.0",
   "description": "dead simple, fast, env configurable node.js json logging",
   "main": "index.js",
   "types": "index.d.ts",

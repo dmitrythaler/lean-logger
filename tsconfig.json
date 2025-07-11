@@ -1,23 +1,53 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
+    "module": "NodeNext",
+    "target": "ES2022",
+    "moduleResolution": "NodeNext",
     "declaration": true,
     "allowJs": true,
     "checkJs": false,
-    "outDir": "./",
-    "rootDir": "src",
-    "strict": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
+    "sourceMap": false,
+    "experimentalDecorators": false,
+    "emitDecoratorMetadata": false,
+    "declarationMap": false,
+    "importHelpers": true,
+    "allowSyntheticDefaultImports": true,
+    "noImplicitAny": false,
+    "strictNullChecks": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "composite": true
   },
   "include": [
-    "./src/index.ts"
+    "./src"
   ],
   "exclude": [
-  ]
+    "node_modules/",
+    "sandbox/",
+    "test/",
+    "dist/"
+  ],
+  "ts-node": {
+    // It is faster to skip typechecking.
+    // Remove if you want ts-node to do typechecking.
+    "transpileOnly": true,
+    "files": true,
+    "compilerOptions": {
+      "noEmit": true,
+      "allowImportingTsExtensions": true,
+      "declarationMap": false,
+      "declaration": false
+    }
+  }
 }

@@ -1,6 +1,9 @@
 node_modules/
 sandbox/
+dist/
 *.log
 .editorconfig
 .yarn/
 .yarnrc.yml
+.vscode/
+*.tsbuildinfo

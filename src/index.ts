@@ -1,101 +1,120 @@
+export type LogLevel = 'info' | 'warn' | 'warning' | 'error' | 'fatal' | 'fuckup' | 'debug' | 'trace' | 'silly' | 'silent'
+
 export type LoggerData = {
   channel: string,
-  time: number,
-  data: any[]
+  level: LogLevel,
+  time: Date,
+  messages: any[]
 }
 
-export type LoggerChannels = {
-  getChannel?: never,
-  [k: string]: boolean
-}
+type LoggerFunc = (...args: any[]) => void
+type Mixer = (data: Record<string, unknown>) => Record<string, unknown>
+type Mixin = Record<string, unknown> | Mixer
 
-type Keyed<T = unknown> = Record<string, T>
-
-export type LoggerFunc = (...args: any[]) => string | void
-export type LoggerFuncGen = (ch: string) => LoggerFunc
+export type Channel = Record<LogLevel, LoggerFunc>
+type ChannelGen = (channelName?: string) => Channel
 export type Logger = {
-  getChannel: LoggerFuncGen
-} & Keyed<LoggerFunc>
+  getChannel: ChannelGen
+} & Channel
 
-export type MixinFunc = (LoggerData) => LoggerData & Keyed
-export type LoggerMixin = {
-  channels: string | string[],
-  mixin: Keyed | MixinFunc
-}
-
-export type LoggerConfig = {
-  channels?: LoggerChannels,
-  mix?: LoggerMixin
-}
+export type LoggerConfig = Record<string, LogLevel>
 
 //  ---------------------------------
 
-const defaultChannels: LoggerChannels = {
-  info: true,
-  warn: true,
-  error: true,
-  fatal: true
+const levelSeverities: Record<LogLevel, number> = {
+  silent: 666,
+  fuckup: 30,
+  fatal: 30,
+  error: 25,
+  warn: 20,
+  warning: 20,
+  info: 15,
+  debug: 10,
+  trace: 5,
+  silly: 1,
 }
 
-const errorChannels = ['error', 'fatal', 'fuckup']
-
-/**
- * Checks if mixin is valid for the channel and returns it, or null if not
- *
- * @param {string} channel - channel like 'info' or 'error'
- * @param {LoggerMixin} [ext] - optional logging data extender
- * @returns {(MixinFunc|Object|null)}
- */
-const mixin4Channel = (channel: string, mix?: LoggerMixin): null | Keyed | MixinFunc => {
-  return (
-    (
-      mix?.channels === '*' ||
-      mix?.channels === 'all' ||
-      mix?.channels === channel || (
-        Array.isArray(mix?.channels) && (
-          mix?.channels.includes('*') ||
-          mix?.channels.includes('all') ||
-          mix?.channels.includes(channel)
-        )
-      )
-    ) && mix.mixin
-  ) || null
+const dummyFunc: LoggerFunc = () => {}
+const dummyChannel: Channel = {
+  silent: dummyFunc,
+  fuckup: dummyFunc,
+  fatal: dummyFunc,
+  error: dummyFunc,
+  warn: dummyFunc,
+  warning: dummyFunc,
+  info: dummyFunc,
+  debug: dummyFunc,
+  trace: dummyFunc,
+  silly: dummyFunc,
 }
 
-/**
- * Builds logging function
- *
- * @param {string} channel - channel like 'info' or 'error'
- * @param {LoggerMixin} [mix] - optional logging data extender
- * @returns {LoggerFunc}
- */
-const buildLogFunc = (channel: string, mix?: LoggerMixin): LoggerFunc => {
-  const out = errorChannels.includes(channel) ? process.stderr : process.stdout
-  const mixin = mixin4Channel(channel, mix)
 
-  // mixin not provided or not valid for this channel
+const mergeEnvToConfig = (conf: LoggerConfig): LoggerConfig => {
+  const { LOG, LOGGER } = process.env
+  const envParams = LOG || LOGGER || ''
+  const config: LoggerConfig = {
+    default: 'info',
+    ...conf
+  }
+
+  envParams.split(',').forEach(channelAndLevel => {
+    let [channel, level] = channelAndLevel.split(':').map(s => s.trim())
+    if (levelSeverities[channel]) {
+      level = channel
+      channel = 'default'
+    } else {
+      level = level || 'info'
+      if (!channel || channel === '*') {
+        channel = 'default'
+      }
+    }
+    if (levelSeverities[level] === undefined) {
+      console.warn(JSON.stringify({
+        channel: 'DEFAULT',
+        level: 'WARN',
+        time: new Date(),
+        messages: [`Unknown log level "${level}" for channel "${channel}". ${channel === 'default' ? 'Set to "info".' : 'Skipped.'}`],
+      }))
+      if (channel === 'default') {
+        config.default = 'info'
+      }
+    } else {
+      config[channel] = level as LogLevel
+    }
+  })
+  return config
+}
+
+const buildLogFunc = (channel: string, level: LogLevel, threshold: LogLevel, mixin?: Mixin): LoggerFunc => {
+
+  if (levelSeverities[level] < levelSeverities[threshold] || level === 'silent') {
+    return dummyFunc
+  }
+
+  const out = levelSeverities[level] > levelSeverities.warn ? process.stderr : process.stdout
+
   if (!mixin) {
     return (...args: any[]) => {
       const msg = JSON.stringify({
         channel: channel.toUpperCase(),
-        time: Date.now(),
+        level: level.toUpperCase(),
+        time: new Date(),
         messages: [...args],
       }/*, null, 2*/)
       out.write(msg + '\n')
-      return msg
     }
   }
 
   // mixin is a function
   if (typeof mixin === 'function') {
     return (...args: any[]) => {
-      const msg = JSON.stringify((mixin as MixinFunc)({
+      const msg = JSON.stringify(mixin({
         channel: channel.toUpperCase(),
-        time: Date.now(),
+        level: level.toUpperCase(),
+        time: new Date(),
         messages: [...args],
       }))
       out.write(msg + '\n')
-      return msg
     }
   }
 
@@ -103,87 +122,39 @@ const buildLogFunc = (channel: string, mix?: LoggerMixin): LoggerFunc => {
   return (...args: any[]) => {
     const msg = JSON.stringify({
       channel: channel.toUpperCase(),
-      time: Date.now(),
-      ...(mixin as Keyed),
+      level: level.toUpperCase(),
+      time: new Date(),
+      ...mixin,
       messages: [...args],
     })
     out.write(msg + '\n')
-    return msg
   }
-}
-
-/**
- * Parses env variable LOG(LOGGER,DEBUG) and returns list of active channels
- *
- * @param {LoggerChannels} channels - logger channels hash
- * @returns {string[]}
- */
-const activeChannelsList = (channels: LoggerChannels): string[] => {
-  const env = process.env
-  const envParams = env['LOG'] || env['LOGGER'] || env['DEBUG']
-  let hash = { ...channels }
-  if (!envParams) {
-    return Object.keys(hash).filter(k => hash[k])
-  }
-
-  envParams.split(',').forEach(channel => {
-    if (channel.startsWith('-')) {
-      // starts with [-] - deactivate
-      channel = channel.slice(1)
-      if (channel === '*' || channel === 'all') {
-        hash = {} as LoggerChannels
-      } else if (hash[channel]) {
-        hash[channel] = false
-      }
-    } else {
-      // starts with [+] or nothing - activate
-      if (channel.startsWith('+')) {
-        channel = channel.slice(1)
-      }
-      if (channel === '*' || channel === 'all') {
-        // all default channels
-        Object.keys(defaultChannels).forEach(ch => hash[ch] = true)
-      } else {
-        // create/activate channel
-        hash[channel] = true
-      }
-    }
-  })
-  return Object.keys(hash).filter(k => hash[k])
 }
 
 /**
  * Creates logger from config and mixin
  *
- * @param {LoggerConfig} [config] - logger config
+ * @param [config] - logger config
+ * @param [mix] - optional mixin to extend log data
  * @returns {Logger}
  */
-export const createLogger = (config: LoggerConfig = {}): Logger => {
-  const dummyFunc = () => {}
-  const channels = activeChannelsList({ ...defaultChannels, ...config.channels } as LoggerChannels)
-  const wildChannels = channels.filter(ch => ch.endsWith('*')).map(ch => ch.slice(0, -1))
-
-  const logger = {
-    // returns channel with the given name, if channel is not active then it
-    getChannel: function (ch: string): LoggerFunc {
-      const func = this[ch]
-      if (func && func !== dummyFunc) {
-        return func
-      }
-      // channel not found, checks wilds - channels ending with '*'
-      const found = wildChannels.find(wch => ch.startsWith(wch))
-      return found ? buildLogFunc(ch, config.mix) : dummyFunc
+export const createLogger = (config: LoggerConfig = {}, mix?: Mixer | Record<string, unknown>): Logger => {
+  config = mergeEnvToConfig(config)
+  const getChannel = (channelName?: string): Channel => {
+    const threshold = config[channelName || 'default']
+    if (!threshold || threshold === 'silent') {
+      return dummyChannel
     }
+    return (<LogLevel[]>Object.keys(levelSeverities)).reduce((channel: Channel, lvl: LogLevel) => {
+      channel[lvl] = buildLogFunc(channelName || 'default', lvl, threshold, mix)
+      return channel
+    }, {} as Channel)
   }
 
-  channels.forEach(ch => logger[ch] = buildLogFunc(ch, config.mix))
-
-  // the Proxy allows call non-existent channels: if channel doesn't exist it invokes dummy func
-  const handler = {
-    get: (target, prop) => target[prop] || dummyFunc
+  return {
+    getChannel,
+    ...getChannel('default')
   }
-
-  return new Proxy(logger, handler)
 }
 
 //  ---------------------------------

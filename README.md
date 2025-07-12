@@ -1,190 +1,134 @@
 # lean-logger
-Lean-logger is a nodejs logger, doing only logging, only json to only console. It's configurable mainly with ENV variables. 0-dependency, 0-bullshit and based on [The Twelve-Factor App](https://12factor.net/logs) methodology. <br/>
+Lean-logger is a nodejs logger, doing only logging, only json to only console, very lean with no dependencies.
 
-Also I think that the "severity levels" approach is suitable only to very simple application: it is clear for everyone that "severity" of the `error` message is higher than that of `info` or `silly`, so we can control them by setting that level to show only messages with "equal" or "bigger" levels.
-But it is not so easy to separate when for ex. one needs to show database layer messages and keep silent stripe library messages - both types are about debug/info level. What of them are "bigger"? How to hide one and show another?
+## Why (the heck another logger lib)?
+There 2 main reasons:
 
-That's why this logger does not contain levels at all - there are channels. The channel should be explicitly set as "active" via ENV var or config to output anything. Default channels are `info`, `warn`, `error` and `fatal` - they, on the contrary, should be explicitly silenced.
+  0. A single global logging level (from `trace` to `error`) isn't enough for any non-trivial application. What if your database layer has bugs and needs `debug` or `trace` to diagnose them, while the rest of the app only needs `warn`? Typically, you set something like `LOG=trace` and drown in gigabytes of logs. Even worse, what if different modules *constantly* need different verbosity levels? We all know the usual answer: crank logging to the max and put up with tons of noise - and wasted thousands in log storage.
+  1. In the modern containerized world, a logging library should do one thing: [write to the console](https://12factor.net/logs). Log routing, storage, and processing should be handled by telemetry systems (like OpenTelemetry, Fluentd, and/or the ELK stack) or container orchestration tools (like Kubernetes, Docker, or Nomad).
 
-So ...
-## To Install
-```bash
-npm i -S lean-logger
-# or
-yarn add lean-logger
-```
-## To Use
-```javascript
-import { createLogger } from 'lean-logger'
-const logger = createLogger()
-...
-  logger.warn('Hi there, got some issue', someIssueData)
-  logger.info('It\'s ok now', someData)
-  logger.debug('Debug info', process.env)
-  ...
-```
-which prints
-```console
-{"channel":"WARN","time":1629615224513,"messages":["Hi there, got some issue",{...someIssueData}]}
-{"channel":"INFO","time":1629615224513,"messages":["It's ok now",{...someData}]}
-```
-`logger.debug` prints nothing as it's inactive by default
+## So ...
+The solution is simple: this library introduces logging "channels" - like a separate loggers for different parts of your application, each with its own verbosity level, independently configured via config in code or via environment dynamically.
 
-## To Config
-Empty configuration means these defaults:
-```javascript
-const logger = createLogger({
-  channels: {
-    info: true,
-    warn: true,
-    error: true,
-    fatal: true
-  }
-})
-```
-This default configuration is being merged with that provided by user, so
-```javascript
-const logger = createLogger({
-  http: true,
-  request: true
-})
-```
-implicitly results in
-```javascript
-const logger = createLogger({
-  channels: {
-    info: true,
-    warn: true,
-    error: true,
-    fatal: true,
-    http: true,
-    request: true
-  }
-})
-```
-If you want to silence default channel, e.g. `info` - you'll need to do it explicitly, like
-```javascript
-const logger = createLogger({
-  channels: {
-    info: false,
-    warn: false,
-    stripe: true
-  }
-})
-```
+```typescript
+import {
+  createLogger,
+  type Channel,
+  type Logger,
+  type LoggerConfig,
+  // type LogLevel,
+  // type LoggerData,
+} from 'lean-logger';
 
-## To print to non-existent channels
-The logger can be used with any channel, including never defined:
-```javascript
-const logger = createLogger()
-// ... somewhere later
-logger.noSuchChannel(req.ip, req.method, req.originalUrl, res.statusCode)
-logger.confession('I like Old Grand-Dad Bourbon', url)
-```
-They output nothing and they don't throw anything like `TypeError: "confession" is not a function`. So one needs not to bother with including all possible channels in the configuration - they can be activated any time with environment variable or just kept them silent.
+// LoggerConfig is optional parameter, there is always one default channel, always on, working traditional way - { default: 'info' }
+const logger: Logger = createLogger({
+  // set separate leve for every channel
+  default: 'warn',
+  db: 'debug',
+  auth: 'trace',
+} as LoggerConfig);
 
-## To configure with ENV
-Use `LOG` env variable to manage logging
-```console
-LOG=(+|-|)(channelName|all),(+|-|)(channelName|all|*),... node your-app
-```
-"-" sign to deactivate channel, "+" or nothing to activate<br />
-"all" or "*" means all default channels, only makes sense with "-"
-
-```console
-LOG=* node your-app
-LOG=all node your-app
-```
-all default channels active(no need to do so)
-
-```console
-LOG=*,+debug node your-app
-LOG=+debug node your-app
-LOG=debug node your-app
-```
-All default channels and debug active, so `logger.debug(...)` will work
-
-```console
-LOG=-all,error,fatal node your-app
-```
-All default channels deactivated except error and fatal
-
-```console
-LOG=-info,-warn,+http node your-app
-```
-Default channels without info and warn plus http channel
-
-```console
-LOG=-all,confession node your-app
-```
-Default channels all dead but now everyone knows you like Bourbon.
-
-## To Extract channel and set active channels "wildly*"
-```javascript
-import { createLogger } from 'lean-logger'
-const logger = createLogger({ ... })
-// extract channel to separate func
-const logMigration = logger.getChannel('migration')
-// ... somewhere
-logMigration(`Migration ${name}, table ${table}, ${rNum} records`, someData, ...blah)
-```
-This is particularly useful combined with wild channel activation:
-```javascript
-const logger = createLogger({ ... })
-const logCard = logger.getChannel('square:card')
-const logPayment = logger.getChannel('square:pmnt')
-const logRefund = logger.getChannel('square:rfnd')
-// ... somewhere
-logCard(`User ${uid}, card updated ${cardId}, ...`, ...blah)
 // ...
-logPayment(`User ${uid}, card ${cardId}, payment successful...`, ...blah)
-// ...
-logRefund(`User ${uid}, card ${cardId}, payment ${pmntId} cancelled...`, ...blah)
+logger.info('Service started');
+logger.error('Failed to start service, fatal error', error.toString());
+
+// somewhere in DAL module
+const dbLog: Channel = logger.getChannel('db');
+dbLog.warn('Database query took longer than expected', { duration });
+dbLog.info('Database connection established');
+dbLog.trace('Query executed:', q);
+
+// somewhere in payments module
+const pmtsLog: Channel = logger.getChannel('payments');
+pmtsLog.info('Payment processed successfully', response);
+pmtsLog.debug('Payment data', paymentData);
+pmtsLog.fatal('Payment processing failed', pmtError);
+
+// somewhere in auth module
+const authLog: Channel = logger.getChannel('auth');
+authLog.info('User authenticated', uid);
+authLog.debug('User auth data', userData);
+authLog.warn('User data has invalid signature', userData, signature);
 ```
-To see only e.g. payments one has to activate
+...which prints:
+```json
+{"channel":"DEFAULT","level":"INFO","time":"2025-07-12T11:56:10.979Z","messages":["Service started"]}
+{"channel":"DEFAULT","level":"ERROR","time":"2025-07-12T11:56:10.980Z","messages":["Failed to start service, fatal error","Error: Shit happens"]}
+{"channel":"DB","level":"WARN","time":"2025-07-12T11:56:10.980Z","messages":["Database query took longer than expected",{"duration":"890ms"}]}
+{"channel":"DB","level":"INFO","time":"2025-07-12T11:56:10.980Z","messages":["Database connection established"]}
+{"channel":"AUTH","level":"INFO","time":"2025-07-12T11:56:10.980Z","messages":["User authenticated","user123"]}
+{"channel":"AUTH","level":"DEBUG","time":"2025-07-12T11:56:10.980Z","messages":["User auth data",{"name":"John Doe","email":"john@doe.com"}]}
+{"channel":"AUTH","level":"WARN","time":"2025-07-12T11:56:10.980Z","messages":["User data has invalid signature",{"name":"John Doe","email":"john@doe.com"},"abc123signature"]}
+```
+2 points from the above:
+- the `logger` already contains default channel, so you don't need to get it separately;
+- the `payments` channel is not declared, so `logger.getChannel('payments')` return always silent channel, which does actually nothing.
+
+## To configure via environment
+
+It allows you to dynamically change the verbosity level for any channel - or toggle channels on and off entirely - by setting the `LOG` (or `LOGGER`) environment variable:
+```
+LOG=<channel>:<level>,<channel>:<level>,...
+```
+The `default` channel name can be missed or set as an empty string or '*', so the below lines mean the same:
 ```console
-LOG=square:pmnt node your-app
+LOG=info,db:debug,auth:trace
+LOG=:info,db:debug,auth:trace
+LOG=*:info,db:debug,auth:trace
 ```
-Samely for only cards update:
+The environment configuration takes precedence,so if you set:
 ```console
-LOG=square:card node your-app
+LOG=info,db:silent,auth:trace,payments
 ```
-And to see all logs for the `square` module it's enough to set
-```console
-LOG=square:* node your-app
-```
+then the `db` channel will be silenced despite `debug` level in the code, and the `payments` channels will get `info` level and will start to print.
+
+
 ## To Extend/Update channels' data
-```javascript
-const logger = createLogger({
-  channels: {
-    // ...
-  },
-  mix: {
-    channels: '*', // string or string[], channel name(s) or '*' or 'all'
-    mixin: { service: 'AUTH-SERVICE' }
-  })
-// ... somewhere
-logger.info(`User ${uid}, password updated`, ...blah)
-```
-now it outputs
-```console
-{"channel":"INFO","service":"AUTH-SERVICE","time":1629615224513,"messages":["User XYZ, password upfated",{...blah}]}
 
+```typescript
+const logger: Logger = createLogger({ default: 'warn', ... },
+  // mixin parameter, static
+  {
+    pid: process.pid,
+    service: 'LAX-AIR-MON-12'
+  });
 ```
-The `mix` config parameter can be object or function that receives LoggerData and process it arbitrary way.
+... which adds to output:
+```json
+{"channel":"AUTH","level":"WARN","time":"2025-07-12T12:53:36.268Z","pid":252753,"service":"LAX-AIR-MON-12","messages":["User data has invalid signature",{"name":"John Doe","email":"john@doe.com"},"abc123signature"]}
+```
+Same way you can use function for mixin parameter:
+```typescript
+const logger: Logger = createLogger({ default: 'warn', ... },
+  // mixin parameter, function
+  (data) => ({
+    ...data, // dont forget
+    pid: process.pid,
+    service: 'LAX-AIR-MON-12',
+    messages: [...data.messages, 'Bender was here']
+  })
+);
+```
+... which updates output:
+```json
+{"channel":"AUTH","level":"WARN","time":"2025-07-12T13:01:47.094Z","messages":["User data has invalid signature",{"name":"John Doe","email":"john@doe.com"},"abc123signature","Bender was here"],"pid":253077,"service":"LAX-AIR-MON-12"}
+```
+
 
 ## Bits and pieces
 ### Async output
-Those `logger.anything...` methods use `process.stdout|stderr` internally, so they are asynchronous.
+The lib uses `process.stdout|stderr` internally, so logging is asynchronous.
+
+### Incorrect level names
+In the case of mistyped level name - default channel gets `info` level, any other - `silent`.
+
 ### Channel severity
-Channels named `error`, `fatal` and `fuckup` output to `stderr`.<br/>
-(shouldn't it be configurable?)
+Channels named `error`, `fatal` and `fuckup` output to `stderr`.
 
 ### Colored output
-For debug fancy printing install `jq` then update your dev scripts in `package.json` like this
-```json
-    "dev": "NODE_ENV=development ts-node-dev --no-notify src/server.ts",
-    "dev:jq": "yarn dev 2>&1 | jq -c -R 'fromjson?'",
+For colored printing, pls install `jq` then run your app like
+```console
+node dist/server.js 2>&1 | jq -c -R 'fromjson?'
 ```
-That `2>&1` part combines `stdout` and `stderr`, and the `... -R 'fromjson?'` lets `jq` to ignore non-json output.
+That `2>&1` part combines `stdout` and `stderr`, and the `... -R 'fromjson?'` lets `jq` to ignore non-json output in case you have one.
 

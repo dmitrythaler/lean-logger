@@ -1,4 +1,4 @@
-export type LogLevel = 'info' | 'warn' | 'warning' | 'error' | 'fatal' | 'fuckup' | 'debug' | 'trace' | 'silly' | 'silent'
+export type LogLevel = 'info' | 'warn' | 'error' | 'fatal' | 'debug' | 'trace' | 'silly' | 'silent'
 
 export type LoggerData = {
   channel: string,
@@ -19,15 +19,18 @@ export type Logger = {
 
 export type LoggerConfig = Record<string, LogLevel>
 
+process.on('exit', () => {
+  try { (process.stdout as any)._handle?.setBlocking(true) } catch {}
+  try { (process.stderr as any)._handle?.setBlocking(true) } catch {}
+})
+
 //  ---------------------------------
 
 const levelSeverities: Record<LogLevel, number> = {
   silent: 666,
-  fuckup: 30,
   fatal: 30,
   error: 25,
   warn: 20,
-  warning: 20,
   info: 15,
   debug: 10,
   trace: 5,
@@ -37,11 +40,9 @@ const levelSeverities: Record<LogLevel, number> = {
 const dummyFunc: LoggerFunc = () => {}
 const dummyChannel: Channel = {
   silent: dummyFunc,
-  fuckup: dummyFunc,
   fatal: dummyFunc,
   error: dummyFunc,
   warn: dummyFunc,
-  warning: dummyFunc,
   info: dummyFunc,
   debug: dummyFunc,
   trace: dummyFunc,

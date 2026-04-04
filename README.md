@@ -2,7 +2,7 @@
 Lean-logger is a nodejs logger, doing only logging, only json to only console, very lean with no dependencies.
 
 ## Why (the heck another logger lib)?
-There 2 main reasons:
+There are 2 main reasons:
 
   0. A single global logging level (from `trace` to `error`) isn't enough for any non-trivial application. What if your database layer has bugs and needs `debug` or `trace` to diagnose them, while the rest of the app only needs `warn`? Typically, you set something like `LOG=trace` and drown in gigabytes of logs. Even worse, what if different modules *constantly* need different verbosity levels? We all know the usual answer: crank logging to the max and put up with tons of noise - and wasted thousands in log storage.
   1. In the modern containerized world, a logging library should do one thing: [write to the console](https://12factor.net/logs). Log routing, storage, and processing should be handled by telemetry systems (like OpenTelemetry, Fluentd, and/or the ELK stack) or container orchestration tools (like Kubernetes, Docker, or Nomad).
@@ -26,7 +26,7 @@ const logger: Logger = createLogger({
   default: 'warn',
   db: 'debug',
   auth: 'trace',
-} as LoggerConfig);
+});
 
 // ...
 logger.info('Service started');
@@ -62,7 +62,27 @@ authLog.warn('User data has invalid signature', userData, signature);
 ```
 2 points from the above:
 - the `logger` already contains default channel, so you don't need to get it separately;
-- the `payments` channel is not declared, so `logger.getChannel('payments')` return always silent channel, which does actually nothing.
+- the `payments` channel is not declared in the config, so `logger.getChannel('payments')` returns a silent channel by default. It can be enabled at runtime via `LOG=payments:info` without changing code.
+
+## Attaching channels as logger properties
+
+A convenient pattern is to cast the logger and attach channels directly as named properties, giving you a single object to pass around:
+
+```typescript
+const logger = createLogger({ default: 'warn', dal: 'debug', http: 'info', aws: 'warn' }) as Logger & Record<string, Channel>
+
+logger.dal  = logger.getChannel('dal')
+logger.http = logger.getChannel('http')
+logger.aws  = logger.getChannel('aws')
+
+// then anywhere in your code:
+logger.aws.warn('S3 bucket not found', { bucket });
+logger.dal.debug('Query executed', { sql, duration });
+logger.http.info('Request received', { method, path });
+logger.error('Unhandled exception', err);  // default channel still on the root
+```
+
+The cast `as Logger & Record<string, Channel>` is needed because TypeScript doesn't know about the dynamically added properties — the runtime behavior is plain object assignment.
 
 ## To configure via environment
 
@@ -70,13 +90,13 @@ It allows you to dynamically change the verbosity level for any channel - or tog
 ```
 LOG=<channel>:<level>,<channel>:<level>,...
 ```
-The `default` channel name can be missed or set as an empty string or '*', so the below lines mean the same:
+The `default` channel name can be omitted or set as an empty string or `*`, so the below lines mean the same:
 ```console
 LOG=info,db:debug,auth:trace
 LOG=:info,db:debug,auth:trace
 LOG=*:info,db:debug,auth:trace
 ```
-The environment configuration takes precedence,so if you set:
+The environment configuration takes precedence, so if you set:
 ```console
 LOG=info,db:silent,auth:trace,payments
 ```
@@ -102,7 +122,7 @@ Same way you can use function for mixin parameter:
 const logger: Logger = createLogger({ default: 'warn', ... },
   // mixin parameter, function
   (data) => ({
-    ...data, // dont forget
+    ...data, // spread original data to preserve fields
     pid: process.pid,
     service: 'LAX-AIR-MON-12',
     messages: [...data.messages, 'Bender was here']
@@ -123,7 +143,7 @@ The lib uses `process.stdout|stderr` internally, so logging is asynchronous.
 In the case of mistyped level name - default channel gets `info` level, any other - `silent`.
 
 ### Channel severity
-Channels named `error`, `fatal` and `fuckup` output to `stderr`.
+Log calls at `error` and `fatal` levels output to `stderr`; everything else goes to `stdout`.
 
 ### Colored output
 For colored printing, pls install `jq` then run your app like

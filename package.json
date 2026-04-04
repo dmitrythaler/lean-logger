@@ -1,7 +1,7 @@
 {
   "name": "lean-logger",
-  "version": "5.0.0",
-  "description": "dead simple, fast, env configurable node.js json logging",
+  "version": "5.0.1",
+  "description": "dead simple, fast, env configurable, multi-channel node.js json logging",
   "engines": {
     "node": ">=23"
   },
